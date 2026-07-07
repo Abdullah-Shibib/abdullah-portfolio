@@ -177,45 +177,101 @@ export interface Project {
 
 export const PROJECTS: Project[] = [
   {
-    id: 'datawhisk',
+    id: 'AI-Trading-Bot',
+    name: 'AI Trading Bot',
+    status: 'ACTIVE',
+    tagline: 'Automated trading strategy powered by sentiment analysis and market backtesting.',
+    detail:
+      'Python trading bot using FinBERT/PyTorch sentiment signals, Alpaca API execution, Lumibot strategy logic, and YahooDataBacktesting.',
+    stack: ['Python', 'PyTorch', 'FinBERT', 'Alpaca API', 'Lumibot', 'NLP'],
+    metrics: [
+      { label: 'Signal source', value: 'FinBERT' },
+      { label: 'Broker API', value: 'Alpaca' },
+      { label: 'Backtests', value: 'Yahoo data' },
+    ],
+  },
+  {
+    id: 'Aim-Training-Simulator',
+    name: 'Aim Training Simulator',
+    status: 'SHIPPED',
+    tagline: 'Pygame aim trainer with moving targets, power-ups, scoring, and login flow.',
+    detail:
+      'Python game that spawns randomized targets and power-ups while tracking hit rate, lives, elapsed time, and player performance.',
+    stack: ['Python', 'Pygame'],
+    metrics: [
+      { label: 'Target types', value: '3+' },
+      { label: 'Power-ups', value: '3' },
+      { label: 'Runtime', value: 'Pygame' },
+    ],
+  },
+  {
+    id: 'DataWhisk',
     name: 'DataWhisk',
     status: 'LIVE',
-    tagline: 'AI sentiment analytics for local bakeries',
+    tagline: 'Google review scraping and transformer sentiment analytics for business insights.',
     detail:
-      'End-to-end platform ingesting customer reviews, classifying sentiment with a fine-tuned transformer, and surfacing actionable trends on a live dashboard.',
-    stack: ['Python', 'PyTorch', 'Next.js', 'PostgreSQL', 'AWS'],
+      'Playwright scraper plus Python NLP pipeline for sentiment analysis, aspect extraction, keyword mining, and customer-feedback visualization.',
+    stack: ['Python', 'Playwright', 'PyTorch', 'Pandas', 'Node.js', 'NLP'],
     metrics: [
-      { label: 'Model accuracy', value: '94.2%' },
-      { label: 'Reviews processed', value: '38k+' },
-      { label: 'Latency', value: '<80ms' },
+      { label: 'Source', value: 'Google Reviews' },
+      { label: 'Analysis', value: 'BERT NLP' },
+      { label: 'Outputs', value: 'Insights' },
     ],
   },
   {
-    id: 'fivem',
-    name: 'FiveM RP City',
-    status: 'ACTIVE',
-    tagline: 'Founded & scaled a 100+ player game server',
-    detail:
-      'Built custom gameplay systems, economy, and payment flows in Lua/C#; grew a live community past 100 concurrent players with 99.9% uptime.',
-    stack: ['Lua', 'C#', 'Node.js', 'MySQL', 'Docker'],
-    metrics: [
-      { label: 'Concurrent players', value: '100+' },
-      { label: 'Uptime', value: '99.9%' },
-      { label: 'MRR', value: '$3,500' },
-    ],
-  },
-  {
-    id: 'testnet-viewer',
-    name: 'Testnet 3D Viewer',
+    id: 'Ecommerce-Website',
+    name: 'Ecommerce Website',
     status: 'SHIPPED',
-    tagline: '3D network deployment viewer @ Ericsson',
+    tagline: 'Responsive computer-hardware storefront with product sliders and catalog UI.',
     detail:
-      'Interactive Three.js visualization of the Lund baseband testnet — nodes, links, and live deployment states for the whole team.',
-    stack: ['TypeScript', 'Three.js', 'React', 'REST'],
+      'Front-end storefront for PC hardware with navigation, featured products, product details, gallery content, and responsive layout.',
+    stack: ['HTML', 'CSS', 'JavaScript'],
     metrics: [
-      { label: 'Nodes rendered', value: '400+' },
-      { label: 'Team adoption', value: '100%' },
-      { label: 'FPS', value: '60' },
+      { label: 'Category', value: 'Hardware' },
+      { label: 'UI', value: 'Responsive' },
+      { label: 'Stack', value: 'Vanilla JS' },
+    ],
+  },
+  {
+    id: 'Ligalytics-app-',
+    name: 'Ligalytics App',
+    status: 'ACTIVE',
+    tagline: 'Legal analytics web app contribution from the GitHub Projects workspace.',
+    detail:
+      'Collaborative legal analytics app with Abdullah contributing front-end implementation and interface work.',
+    stack: ['Front-end', 'Web App'],
+    metrics: [
+      { label: 'Role', value: 'Front-end' },
+      { label: 'Type', value: 'Legal tech' },
+      { label: 'Repo', value: 'GitHub' },
+    ],
+  },
+  {
+    id: 'Motion-detection-security-system',
+    name: 'Motion Detection Security System',
+    status: 'SHIPPED',
+    tagline: 'Python/OpenCV camera security app with motion detection and recording controls.',
+    detail:
+      'Desktop security system that monitors a camera feed, detects motion, records video, and exposes controls through a user interface.',
+    stack: ['Python', 'OpenCV', 'Tkinter'],
+    metrics: [
+      { label: 'Input', value: 'Camera' },
+      { label: 'Detection', value: 'Motion' },
+      { label: 'Output', value: 'Recordings' },
+    ],
+  },
+  {
+    id: 'Personal-AI-Doctor-P.A.I.D',
+    name: 'Personal AI Doctor P.A.I.D',
+    status: 'SHIPPED',
+    tagline: 'Flask web app using RAG and LLMs to respond to symptom-based medical prompts.',
+    detail:
+      'Web application that combines a Flask backend, HTML/CSS/JavaScript UI, RAG workflow, and LLM responses for symptom-driven diagnosis demos.',
+    stack: ['Python', 'Flask', 'RAG', 'LLM', 'HTML', 'JavaScript'],
+    metrics: [
+      { label: 'Backend', value: 'Flask' },
+      { label: 'AI flow', value: 'RAG' },
+      { label: 'Interface', value: 'Web' },
     ],
   },
 ];

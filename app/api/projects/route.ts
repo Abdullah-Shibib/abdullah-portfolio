@@ -2,12 +2,20 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { NextResponse } from 'next/server';
+import { PROJECTS } from '@/lib/data';
 
 /** Always re-scan the folder so new repos appear without a rebuild. */
 export const dynamic = 'force-dynamic';
 
-const PROJECTS_DIR =
-  process.env.GITHUB_PROJECTS_DIR || join(homedir(), 'OneDrive', 'Desktop', 'GitHub Projects');
+const PROJECTS_DIR_CANDIDATES = [
+  process.env.GITHUB_PROJECTS_DIR,
+  join(homedir(), 'OneDrive', 'Desktop', 'github projects'),
+  join(homedir(), 'OneDrive', 'Desktop', 'GitHub Projects'),
+  join(homedir(), 'OneDrive', 'Desktop', 'Github Projects'),
+].filter(Boolean) as string[];
+
+const PROJECTS_DIR = PROJECTS_DIR_CANDIDATES.find((dir) => existsSync(dir)) ?? PROJECTS_DIR_CANDIDATES[0];
+const FALLBACK_PROJECTS = new Map(PROJECTS.map((p) => [p.id.toLowerCase(), p]));
 
 const EXT_TECH: Record<string, string> = {
   '.py': 'Python', '.ts': 'TypeScript', '.tsx': 'React', '.jsx': 'React',
@@ -83,6 +91,10 @@ function gitRemote(dir: string): string | null {
   }
 }
 
+function weakDescription(description: string) {
+  return !description || /@/.test(description) || /^https?:\/\//.test(description);
+}
+
 export async function GET() {
   let dirs: string[] = [];
   try {
@@ -101,15 +113,17 @@ export async function GET() {
   const projects = dirs.map((folder) => {
     const dir = join(PROJECTS_DIR, folder);
     const { description, text } = parseReadme(dir);
+    const fallback = FALLBACK_PROJECTS.get(folder.toLowerCase());
     const tech = new Set<string>();
     walkExtensions(dir, 2, tech);
     for (const [re, label] of README_TECH) if (re.test(text)) tech.add(label);
+    const stack = tech.size ? Array.from(tech).sort((a, b) => a.localeCompare(b)) : fallback?.stack ?? [];
 
     return {
       id: folder,
-      name: folder.replace(/-+$/, '').replace(/[-_]+/g, ' ').trim(),
-      description: description || 'See the repository for details.',
-      tech: Array.from(tech).sort((a, b) => a.localeCompare(b)).slice(0, 6),
+      name: fallback?.name || folder.replace(/-+$/, '').replace(/[-_]+/g, ' ').trim(),
+      description: weakDescription(description) ? fallback?.tagline || 'See the repository for details.' : description,
+      tech: stack.slice(0, 6),
       link: gitRemote(dir) || `https://github.com/Abdullah-Shibib/${folder}`,
     };
   });
