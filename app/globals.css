@@ -1,0 +1,170 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --neon: #4ea89a;
+  --violet: #5f7a4a;
+}
+
+html,
+body {
+  height: 100%;
+  background: #0b0a07;
+}
+
+/* ---------- Glassmorphism HUD panels ---------- */
+.hud-panel {
+  @apply rounded-xl border border-teal-400/20 bg-panel backdrop-blur-hud shadow-neon;
+  background-image: linear-gradient(
+    135deg,
+    rgba(78, 168, 154, 0.06),
+    rgba(95, 122, 74, 0.05) 60%,
+    transparent
+  );
+}
+
+.hud-chip {
+  @apply rounded-md border border-teal-400/30 px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-teal-200/90 transition;
+}
+.hud-chip:hover {
+  @apply border-teal-300/80 text-white shadow-neon;
+}
+.hud-chip[data-active='true'] {
+  @apply border-teal-300 bg-teal-400/10 text-white shadow-neon;
+}
+
+.neon-text {
+  color: var(--neon);
+  text-shadow:
+    0 0 8px rgba(78, 168, 154, 0.9),
+    0 0 32px rgba(78, 168, 154, 0.45);
+}
+
+.emerald-text {
+  color: var(--violet);
+  text-shadow: 0 0 24px rgba(95, 122, 74, 0.6);
+}
+
+/* ---------- In-world monitor screens (drei <Html transform>) ---------- */
+.screen {
+  @apply flex flex-col overflow-hidden font-sans text-slate-200;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(14, 30, 26, 0.9), rgba(6, 13, 11, 0.97) 70%),
+    #0d1512;
+  border: 1px solid rgba(78, 168, 154, 0.16);
+  border-radius: 10px;
+  box-shadow: inset 0 0 60px rgba(18, 46, 40, 0.25);
+  user-select: none;
+}
+
+.screen-header {
+  @apply flex items-center justify-between border-b border-teal-400/15 px-4 py-2;
+  background: linear-gradient(to right, rgba(78, 168, 154, 0.07), transparent 60%);
+}
+
+.screen-title {
+  @apply font-display text-[11px] font-bold tracking-[0.35em] text-teal-300;
+}
+
+.screen-body {
+  @apply relative flex-1 overflow-hidden p-3;
+}
+
+.stat-tile {
+  @apply rounded-lg border border-teal-400/15 bg-teal-950/30 px-3 py-2;
+}
+.stat-value {
+  @apply font-mono text-lg font-semibold text-teal-200;
+}
+.stat-label {
+  @apply text-[10px] uppercase tracking-wider text-slate-300;
+}
+
+.live-dot {
+  @apply inline-block h-1.5 w-1.5 rounded-full bg-teal-400;
+  animation: blink 1.6s ease-in-out infinite;
+}
+
+/* ---------- Animations ---------- */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+.spin-slow { animation: spin-slow 12s linear infinite; }
+
+@keyframes dash-flow {
+  to { stroke-dashoffset: -100; }
+}
+.dash-flow {
+  stroke-dasharray: 4 6;
+  animation: dash-flow 4s linear infinite;
+}
+
+@keyframes packet {
+  0% { offset-distance: 0%; opacity: 0; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { offset-distance: 100%; opacity: 0; }
+}
+
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(1000%); }
+}
+.scanline {
+  @apply pointer-events-none absolute inset-x-0 top-0 h-10;
+  background: linear-gradient(to bottom, transparent, rgba(78, 168, 154, 0.05), transparent);
+  animation: scan 7s linear infinite;
+}
+
+@keyframes rise {
+  from { transform: scaleY(0.15); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes draw {
+  from { stroke-dashoffset: 600; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* ---------- Scrollbars inside expanded panels ---------- */
+.panel-scroll::-webkit-scrollbar { width: 6px; }
+.panel-scroll::-webkit-scrollbar-track { background: transparent; }
+.panel-scroll::-webkit-scrollbar-thumb {
+  background: rgba(78, 168, 154, 0.25);
+  border-radius: 3px;
+}
+
+/* ---------- CRT scanline & vignette overlay above the canvas ---------- */
+.atmosphere::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(8, 7, 4, 0.6) 100%);
+}
+
+/* ---------- Accessibility ---------- */
+:focus-visible {
+  outline: 2px solid var(--neon);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+::selection {
+  background: rgba(78, 168, 154, 0.35);
+}
