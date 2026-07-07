@@ -54,27 +54,37 @@ function Deer({ position, facing, phase, buck = false }: { position: [number, nu
   const HIDE = { color: hide, roughness: 1 };
 
   return (
-    <group ref={root} position={position} rotation={[0, facing, 0]} scale={1.1}>
+    <group ref={root} position={position} rotation={[0, facing, 0]} scale={1.35}>
       <group ref={body} position={[0, 0.62, 0]}>
         {/* body */}
         <mesh rotation={[0, 0, Math.PI / 2]}>
-          <capsuleGeometry args={[0.16, 0.45, 5, 10]} />
+          <capsuleGeometry args={[0.17, 0.52, 10, 18]} />
           <meshStandardMaterial {...HIDE} />
         </mesh>
         {/* neck + head */}
         <group ref={head} position={[0.36, 0.1, 0]}>
           <mesh position={[0.1, 0.16, 0]} rotation={[0, 0, -0.7]}>
-            <capsuleGeometry args={[0.055, 0.3, 4, 8]} />
+            <capsuleGeometry args={[0.06, 0.32, 8, 14]} />
             <meshStandardMaterial {...HIDE} />
           </mesh>
-          <mesh position={[0.26, 0.3, 0]}>
-            <boxGeometry args={[0.2, 0.09, 0.08]} />
+          <mesh position={[0.26, 0.3, 0]} scale={[1.45, 0.75, 0.65]}>
+            <sphereGeometry args={[0.075, 16, 12]} />
             <meshStandardMaterial {...HIDE} />
           </mesh>
+          <mesh position={[0.35, 0.28, 0]} scale={[1.25, 0.6, 0.5]}>
+            <sphereGeometry args={[0.045, 12, 8]} />
+            <meshStandardMaterial color="#5f432c" roughness={1} />
+          </mesh>
+          {[-0.042, 0.042].map((z) => (
+            <mesh key={`eye${z}`} position={[0.31, 0.325, z]}>
+              <sphereGeometry args={[0.008, 8, 6]} />
+              <meshBasicMaterial color="#100b06" />
+            </mesh>
+          ))}
           {/* ears */}
           {[-0.045, 0.045].map((z) => (
             <mesh key={z} position={[0.18, 0.38, z]} rotation={[z * 8, 0, 0.3]}>
-              <coneGeometry args={[0.025, 0.08, 5]} />
+              <coneGeometry args={[0.026, 0.09, 8]} />
               <meshStandardMaterial {...HIDE} />
             </mesh>
           ))}
@@ -94,7 +104,7 @@ function Deer({ position, facing, phase, buck = false }: { position: [number, nu
         {/* tail */}
         <group ref={tail} position={[-0.4, 0.08, 0]}>
           <mesh rotation={[0, 0, 0.6]}>
-            <coneGeometry args={[0.035, 0.12, 5]} />
+            <coneGeometry args={[0.035, 0.12, 8]} />
             <meshStandardMaterial color="#e8dcc8" roughness={1} />
           </mesh>
         </group>
@@ -102,7 +112,7 @@ function Deer({ position, facing, phase, buck = false }: { position: [number, nu
       {/* legs */}
       {[[0.24, 0.09], [0.24, -0.09], [-0.24, 0.09], [-0.24, -0.09]].map(([x, z], i) => (
         <mesh key={i} position={[x, 0.28, z]}>
-          <cylinderGeometry args={[0.022, 0.018, 0.56, 6]} />
+          <cylinderGeometry args={[0.022, 0.017, 0.56, 8]} />
           <meshStandardMaterial color="#6a4f34" roughness={1} />
         </mesh>
       ))}
@@ -205,25 +215,35 @@ function Rabbit({ home, radius, phase, idx }: { home: [number, number, number]; 
   });
 
   return (
-    <group ref={ref} scale={1.05}>
-      <mesh position={[0, 0.09, 0]}>
-        <sphereGeometry args={[0.09, 8, 7]} />
+    <group ref={ref} scale={1.35}>
+      <mesh position={[0, 0.09, 0]} scale={[0.9, 0.72, 1.25]}>
+        <sphereGeometry args={[0.1, 16, 12]} />
         <meshStandardMaterial color="#8a7a62" roughness={1} />
       </mesh>
-      <mesh position={[0, 0.16, 0.07]}>
-        <sphereGeometry args={[0.055, 8, 7]} />
+      <mesh position={[0, 0.16, 0.09]} scale={[0.95, 0.8, 1.05]}>
+        <sphereGeometry args={[0.06, 14, 10]} />
         <meshStandardMaterial color="#8a7a62" roughness={1} />
+      </mesh>
+      {[-0.026, 0.026].map((x) => (
+        <mesh key={`reye${x}`} position={[x, 0.18, 0.145]}>
+          <sphereGeometry args={[0.006, 8, 6]} />
+          <meshBasicMaterial color="#120d09" />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.145, 0.158]} scale={[1, 0.65, 0.5]}>
+        <sphereGeometry args={[0.013, 8, 6]} />
+        <meshStandardMaterial color="#e8dcc8" roughness={1} />
       </mesh>
       <group ref={ears}>
         {[-0.025, 0.025].map((x) => (
           <mesh key={x} position={[x, 0.24, 0.06]} rotation={[-0.15, 0, 0]}>
-            <capsuleGeometry args={[0.012, 0.07, 3, 6]} />
+            <capsuleGeometry args={[0.013, 0.085, 5, 10]} />
             <meshStandardMaterial color="#8a7a62" roughness={1} />
           </mesh>
         ))}
       </group>
       <mesh position={[0, 0.1, -0.09]}>
-        <sphereGeometry args={[0.03, 6, 5]} />
+        <sphereGeometry args={[0.032, 10, 8]} />
         <meshStandardMaterial color="#e8dcc8" roughness={1} />
       </mesh>
     </group>
@@ -389,7 +409,7 @@ function Fox() {
     const trot = Math.abs(Math.sin(t * (4 + s.speed * 3))) * 0.022 * Math.min(1, s.speed);
     g.position.set(s.pos.x, trot - s.sink * 0.42, s.pos.z);
     g.rotation.y = s.heading;
-    const sc = 0.95 * (1 - s.sink * 0.35);
+    const sc = 1.2 * (1 - s.sink * 0.35);
     g.scale.setScalar(sc);
     if (tail.current) {
       tail.current.rotation.y = Math.sin(t * 2.3) * 0.25 + Math.sin(t * 5.1) * 0.1 * s.speed;
@@ -397,36 +417,54 @@ function Fox() {
   });
 
   return (
-    <group ref={ref} scale={0.95}>
-      <mesh position={[0, 0.3, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <capsuleGeometry args={[0.1, 0.34, 4, 8]} />
+    <group ref={ref} scale={1.2}>
+      <mesh position={[0, 0.3, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.9, 1.18]}>
+        <capsuleGeometry args={[0.105, 0.42, 8, 16]} />
         <meshStandardMaterial color="#a3663a" roughness={1} />
+      </mesh>
+      <mesh position={[0, 0.25, 0.08]} rotation={[Math.PI / 2, 0, 0]} scale={[0.55, 0.35, 0.95]}>
+        <sphereGeometry args={[0.12, 14, 10]} />
+        <meshStandardMaterial color="#efe0c9" roughness={1} />
       </mesh>
       <group ref={head} position={[0, 0.4, 0.24]}>
         <mesh position={[0, 0, 0.03]}>
-          <coneGeometry args={[0.07, 0.18, 6]} />
+          <coneGeometry args={[0.075, 0.19, 12]} />
           <meshStandardMaterial color="#a3663a" roughness={1} />
         </mesh>
+        <mesh position={[0, -0.012, 0.1]} scale={[0.75, 0.45, 1.0]}>
+          <sphereGeometry args={[0.04, 12, 8]} />
+          <meshStandardMaterial color="#efe0c9" roughness={1} />
+        </mesh>
+        <mesh position={[0, -0.012, 0.145]} scale={[0.9, 0.6, 0.6]}>
+          <sphereGeometry args={[0.014, 8, 6]} />
+          <meshBasicMaterial color="#130b08" />
+        </mesh>
+        {[-0.032, 0.032].map((x) => (
+          <mesh key={`feye${x}`} position={[x, 0.025, 0.075]}>
+            <sphereGeometry args={[0.006, 8, 6]} />
+            <meshBasicMaterial color="#140d08" />
+          </mesh>
+        ))}
         {[-0.035, 0.035].map((x) => (
           <mesh key={x} position={[x, 0.1, -0.02]}>
-            <coneGeometry args={[0.02, 0.06, 4]} />
+            <coneGeometry args={[0.022, 0.065, 8]} />
             <meshStandardMaterial color="#8a512c" roughness={1} />
           </mesh>
         ))}
       </group>
       <group ref={tail} position={[0, 0.32, -0.28]}>
         <mesh position={[0, 0, -0.12]} rotation={[Math.PI / 2.3, 0, 0]}>
-          <capsuleGeometry args={[0.05, 0.2, 4, 8]} />
+          <capsuleGeometry args={[0.055, 0.24, 8, 14]} />
           <meshStandardMaterial color="#b3763f" roughness={1} />
         </mesh>
         <mesh position={[0, 0.03, -0.26]}>
-          <sphereGeometry args={[0.045, 6, 5]} />
+          <sphereGeometry args={[0.05, 12, 8]} />
           <meshStandardMaterial color="#e8dcc8" roughness={1} />
         </mesh>
       </group>
       {[[0.06, 0.12], [-0.06, 0.12], [0.06, -0.12], [-0.06, -0.12]].map(([x, z], i) => (
         <mesh key={i} position={[x, 0.12, z]}>
-          <cylinderGeometry args={[0.016, 0.014, 0.24, 5]} />
+          <cylinderGeometry args={[0.016, 0.013, 0.24, 8]} />
           <meshStandardMaterial color="#5c3a22" roughness={1} />
         </mesh>
       ))}
@@ -462,17 +500,17 @@ function PerchedBird({ perch, phase, flies = false }: { perch: [number, number, 
     }
   });
   return (
-    <group ref={ref} scale={0.6}>
+    <group ref={ref} scale={0.85}>
       <mesh>
-        <sphereGeometry args={[0.05, 7, 6]} />
+        <sphereGeometry args={[0.05, 12, 9]} />
         <meshStandardMaterial color="#6a5c48" roughness={1} />
       </mesh>
       <mesh position={[0.045, 0.035, 0]}>
-        <sphereGeometry args={[0.032, 6, 5]} />
+        <sphereGeometry args={[0.032, 10, 8]} />
         <meshStandardMaterial color="#5c4c3a" roughness={1} />
       </mesh>
       <mesh position={[-0.07, 0.01, 0]} rotation={[0, 0, 0.5]}>
-        <coneGeometry args={[0.02, 0.09, 4]} />
+        <coneGeometry args={[0.02, 0.09, 8]} />
         <meshStandardMaterial color="#5c4c3a" roughness={1} />
       </mesh>
     </group>
@@ -576,10 +614,10 @@ function RoofFlock({ center, roofY, count = 5, phase = 0 }: { center: [number, n
           ref={(el) => {
             birds.current[i] = el;
           }}
-          scale={0.8}
+          scale={1.05}
         >
           <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <capsuleGeometry args={[0.035, 0.13, 4, 6]} />
+            <capsuleGeometry args={[0.035, 0.13, 7, 10]} />
             <meshStandardMaterial color="#1c1a17" roughness={1} />
           </mesh>
           <group
@@ -633,9 +671,9 @@ function Crow({ offset, loop }: { offset: number; loop: Vector3[] }) {
   });
 
   return (
-    <group ref={ref}>
+    <group ref={ref} scale={1.25}>
       <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <capsuleGeometry args={[0.035, 0.14, 4, 6]} />
+        <capsuleGeometry args={[0.035, 0.14, 7, 10]} />
         <meshStandardMaterial color="#1c1a17" roughness={1} />
       </mesh>
       <group ref={wingL} position={[0.02, 0, 0]}>
@@ -708,13 +746,13 @@ function WireCrow({ sag, phase }: { sag: [number, number, number]; phase: number
     }
   });
   return (
-    <group ref={ref} scale={0.7}>
+    <group ref={ref} scale={1.0}>
       <mesh rotation={[Math.PI / 2.4, 0, 0]}>
-        <capsuleGeometry args={[0.035, 0.11, 4, 6]} />
+        <capsuleGeometry args={[0.035, 0.11, 7, 10]} />
         <meshStandardMaterial color="#1a1815" roughness={1} />
       </mesh>
       <mesh position={[0, 0.07, 0.05]}>
-        <sphereGeometry args={[0.028, 6, 5]} />
+        <sphereGeometry args={[0.028, 10, 8]} />
         <meshStandardMaterial color="#1a1815" roughness={1} />
       </mesh>
       <mesh position={[0, 0.02, -0.1]} rotation={[0.5, 0, 0]}>
@@ -746,13 +784,13 @@ function Pigeon({ base, phase }: { base: [number, number, number]; phase: number
     g.rotation.y = x1 > x0 ? 0.4 : -2.6;
   });
   return (
-    <group ref={ref} scale={0.55}>
+    <group ref={ref} scale={0.82}>
       <mesh rotation={[Math.PI / 2.6, 0, 0]}>
-        <capsuleGeometry args={[0.045, 0.09, 4, 7]} />
+        <capsuleGeometry args={[0.045, 0.09, 7, 10]} />
         <meshStandardMaterial color="#6e6d70" roughness={1} />
       </mesh>
       <mesh position={[0, 0.08, 0.055]}>
-        <sphereGeometry args={[0.03, 6, 5]} />
+        <sphereGeometry args={[0.03, 10, 8]} />
         <meshStandardMaterial color="#4c4a52" roughness={1} />
       </mesh>
       <mesh position={[0, 0.01, -0.09]} rotation={[0.6, 0, 0]}>

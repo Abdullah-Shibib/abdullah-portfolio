@@ -282,7 +282,7 @@ export const ABOUT = {
   name: 'Abdullah Shibib',
   callsign: 'OPERATOR — SHIBIB, A.',
   summary:
-    'Software engineer who builds real-world systems — from ML pipelines at Ericsson to a 100+ player game server run like a product. Happiest where backend, data, and interactive experiences meet.',
+    'Software engineer who builds real-world systems — from a 16-month Ericsson internship track to a 100+ player game server run like a product. Happiest where backend, data, and interactive experiences meet.',
   education: {
     school: 'Carleton University',
     program: 'Honors Bachelor of Information Technology · IRM',
@@ -292,13 +292,13 @@ export const ABOUT = {
     {
       role: 'Data Engineer Intern',
       org: 'Ericsson',
-      period: 'Jan 2026 — Present',
+      period: 'Apr 2026 — Dec 2026',
       brief: 'ML model training workflows (TensorFlow/PyTorch), optimized Python data pipelines, and 3D telecom network visualizations for Lund & Kista.',
     },
     {
       role: 'Software Engineer Intern',
       org: 'Ericsson',
-      period: 'Sep — Dec 2025',
+      period: 'Sep 2025 — Apr 2026',
       brief: 'CI/CD pipelines with GitHub Actions & Jenkins, GPU compute environments, and Python automation for build validation.',
     },
     {

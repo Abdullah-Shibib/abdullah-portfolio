@@ -601,6 +601,7 @@ function GrassField() {
   const texLush = useMemo(() => grassCard(3, 'lush'), []);
   const texMixed = useMemo(() => grassCard(7, 'mixed'), []);
   const texDead = useMemo(() => grassCard(13, 'dead'), []);
+  const heightScale = 0.74;
 
   const clumps = useMemo(() => {
     const r = seeded(77);
@@ -666,9 +667,10 @@ function GrassField() {
       for (const mesh of [refs[k].current, refsB[k].current]) {
         if (!mesh) continue;
         list.forEach((cl, i) => {
-          dummy.position.set(cl.x, cl.s * 0.5, cl.z);
+          const h = cl.s * heightScale;
+          dummy.position.set(cl.x, h * 0.5, cl.z);
           dummy.rotation.set(0, cl.rot + (mesh === refsB[k].current ? Math.PI / 2 : 0), 0);
-          dummy.scale.set(cl.s * 1.4, cl.s, 1);
+          dummy.scale.set(cl.s * 1.4, h, 1);
           dummy.updateMatrix();
           mesh.setMatrixAt(i, dummy.matrix);
           mesh.setColorAt(i, tmpColor.setScalar(cl.tint));
@@ -689,9 +691,10 @@ function GrassField() {
         if (!cl.sway) return;
         meshes.forEach((mesh, mi) => {
           if (!mesh) return;
-          dummy.position.set(cl.x, cl.s * 0.5, cl.z);
+          const h = cl.s * heightScale;
+          dummy.position.set(cl.x, h * 0.5, cl.z);
           dummy.rotation.set(0, cl.rot + (mi ? Math.PI / 2 : 0), Math.sin(t * cl.sway + cl.phase) * 0.09);
-          dummy.scale.set(cl.s * 1.4, cl.s, 1);
+          dummy.scale.set(cl.s * 1.4, h, 1);
           dummy.updateMatrix();
           mesh.setMatrixAt(i, dummy.matrix);
         });

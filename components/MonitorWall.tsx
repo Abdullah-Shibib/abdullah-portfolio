@@ -1,10 +1,10 @@
 'use client';
 
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Color, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, Path, Plane, Ray, Shape, ShapeGeometry, Vector3 } from 'three';
-import { ThreeEvent, useFrame } from '@react-three/fiber';
+import { Color, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, Path, Shape, ShapeGeometry, Vector3 } from 'three';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
-import { MONITORS, MonitorDef, MonitorId } from '@/lib/data';
+import { MONITORS, MonitorDef, MonitorId, monitorById } from '@/lib/data';
 import { useCommandCenter } from '@/lib/store';
 import { SCREENS } from './screens';
 
@@ -12,84 +12,108 @@ import { SCREENS } from './screens';
 const PX_PER_UNIT = 280;
 const DISTANCE_FACTOR = 400 / PX_PER_UNIT;
 
-/** Hitboxes extend this much beyond the visible frame (1.8 ≈ +80%). */
-const HIT_SCALE = 1.8;
-
 const FRAME = '#151210';
 const EDGE_IDLE = new Color('#242a1c');
 const EDGE_HOVER = new Color('#8d9c6a');
 const BEZEL = 0.055;
+const SCREEN_EDGE_PAD_PX = 14;
 
 /* ------------------------------------------------------------------ */
 /*  Pointer → monitor resolution.                                      */
 /*                                                                     */
-/*  Hitboxes are big enough to overlap, so raw raycast order can hand  */
-/*  a click to the wrong neighbor. Every hitbox therefore funnels its  */
-/*  events through one resolver: intersect the pointer ray with each   */
-/*  monitor's plane and pick the monitor whose visible rectangle is    */
-/*  closest. Inside a screen that distance is 0 — the intended monitor */
-/*  always wins, and gap clicks go to the nearest screen.              */
+/*  The visible screens are DOM overlays, so monitor ownership follows */
+/*  the pointer's projected screen-space position instead of 3D        */
+/*  raycast order. The small pixel pad forgives edges without making   */
+/*  neighboring screens steal fast clicks.                             */
 /* ------------------------------------------------------------------ */
 
-interface MonitorFrame {
-  id: MonitorId;
-  origin: Vector3;
-  xAxis: Vector3; // monitor-local right
-  plane: Plane;
-  halfW: number;
-  halfH: number;
+interface ScreenPoint {
+  x: number;
+  y: number;
 }
 
-const FRAMES: MonitorFrame[] = MONITORS.map((m) => ({
-  id: m.id,
-  origin: new Vector3(...m.position),
-  xAxis: new Vector3(Math.cos(m.yaw), 0, -Math.sin(m.yaw)),
-  plane: new Plane().setFromNormalAndCoplanarPoint(
-    new Vector3(Math.sin(m.yaw), 0, Math.cos(m.yaw)),
-    new Vector3(...m.position),
-  ),
-  halfW: m.size[0] / 2 + BEZEL,
-  halfH: m.size[1] / 2 + BEZEL,
-}));
-
-const tmp = new Vector3();
-const tmpHit = new Vector3();
-
-function screenDistance(point: Vector3, f: MonitorFrame) {
-  tmp.copy(point).sub(f.origin);
-  const dx = Math.max(0, Math.abs(tmp.dot(f.xAxis)) - f.halfW);
-  const dy = Math.max(0, Math.abs(tmp.y) - f.halfH);
-  return dx * dx + dy * dy;
-}
-
-function resolveMonitorFromPoint(point: Vector3): MonitorId {
-  let best: MonitorId = FRAMES[0].id;
-  let bestScore = Infinity;
-  for (const f of FRAMES) {
-    const score = screenDistance(point, f);
-    if (score < bestScore) {
-      bestScore = score;
-      best = f.id;
+function pointInPolygon(point: ScreenPoint, polygon: ScreenPoint[]) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i];
+    const b = polygon[j];
+    const crosses = (a.y > point.y) !== (b.y > point.y);
+    if (crosses) {
+      const x = ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+      if (point.x < x) inside = !inside;
     }
+  }
+  return inside;
+}
+
+function distanceToSegment(point: ScreenPoint, a: ScreenPoint, b: ScreenPoint) {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const apx = point.x - a.x;
+  const apy = point.y - a.y;
+  const denom = abx * abx + aby * aby || 1;
+  const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / denom));
+  const dx = point.x - (a.x + abx * t);
+  const dy = point.y - (a.y + aby * t);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function distanceToPolygon(point: ScreenPoint, polygon: ScreenPoint[]) {
+  if (pointInPolygon(point, polygon)) return 0;
+  let best = Infinity;
+  for (let i = 0; i < polygon.length; i++) {
+    best = Math.min(best, distanceToSegment(point, polygon[i], polygon[(i + 1) % polygon.length]));
   }
   return best;
 }
 
-function resolveMonitor(ray: Ray, fallbackPoint: Vector3): MonitorId {
+function resolveScreenMonitorAt(clientX: number, clientY: number, camera: any, canvas: HTMLCanvasElement): MonitorId | null {
+  const rect = canvas.getBoundingClientRect();
+  const point = { x: clientX, y: clientY };
   let best: MonitorId | null = null;
   let bestScore = Infinity;
 
-  for (const f of FRAMES) {
-    const hit = ray.intersectPlane(f.plane, tmpHit);
-    if (!hit) continue;
-    const score = screenDistance(tmpHit, f) + ray.origin.distanceTo(tmpHit) * 0.0001;
+  for (const m of MONITORS) {
+    const center = new Vector3(...m.position);
+    const xAxis = new Vector3(Math.cos(m.yaw), 0, -Math.sin(m.yaw));
+    const halfW = m.size[0] / 2 + BEZEL * 1.25;
+    const halfH = m.size[1] / 2 + BEZEL * 1.25;
+    const corners: ScreenPoint[] = [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ].map(([sx, sy]) => {
+      const p = center.clone().addScaledVector(xAxis, sx * halfW);
+      p.y += sy * halfH;
+      p.project(camera);
+      return {
+        x: rect.left + (p.x * 0.5 + 0.5) * rect.width,
+        y: rect.top + (-p.y * 0.5 + 0.5) * rect.height,
+      };
+    });
+
+    const distance = distanceToPolygon(point, corners);
+    if (distance > SCREEN_EDGE_PAD_PX) continue;
+
+    const cx = corners.reduce((sum, p) => sum + p.x, 0) / corners.length;
+    const cy = corners.reduce((sum, p) => sum + p.y, 0) / corners.length;
+    const maxX = Math.max(...corners.map((p) => p.x));
+    const minX = Math.min(...corners.map((p) => p.x));
+    const maxY = Math.max(...corners.map((p) => p.y));
+    const minY = Math.min(...corners.map((p) => p.y));
+    const nw = Math.max(1, maxX - minX);
+    const nh = Math.max(1, maxY - minY);
+    const centerBias = ((point.x - cx) / nw) ** 2 + ((point.y - cy) / nh) ** 2;
+    const score = distance * distance + centerBias;
+
     if (score < bestScore) {
       bestScore = score;
-      best = f.id;
+      best = m.id;
     }
   }
 
-  return best ?? resolveMonitorFromPoint(fallbackPoint);
+  return best;
 }
 
 /* ------------------------------------------------------------------ */
@@ -197,11 +221,10 @@ function LightBar({ w, h, initiallyOn = false }: { w: number; h: number; initial
 interface MonitorProps {
   def: MonitorDef;
   hovered: boolean;
-  onHover: (id: MonitorId | null) => void;
 }
 
-function Monitor({ def, hovered, onHover }: MonitorProps) {
-  const { focus, focused, setHint, power } = useCommandCenter();
+function Monitor({ def, hovered }: MonitorProps) {
+  const { focused, power } = useCommandCenter();
   const edgeRef = useRef<Mesh>(null);
   const ringMat = useRef<MeshBasicMaterial>(null);
   const backingRef = useRef<MeshStandardMaterial>(null);
@@ -257,16 +280,6 @@ function Monitor({ def, hovered, onHover }: MonitorProps) {
       g.scale.z += (s - g.scale.z) * k;
     }
   });
-
-  const handleMove = (e: ThreeEvent<PointerEvent>) => {
-    e.stopPropagation();
-    const id = resolveMonitor(e.ray, e.point);
-    onHover(id);
-    if (id === def.id) {
-      setHint(power ? `Open ${def.label} — ${def.subtitle}` : 'MAIN POWER OFFLINE — hit the red switch on the desk');
-      document.body.style.cursor = 'pointer';
-    }
-  };
 
   return (
     <group position={def.position} rotation={[0, def.yaw, 0]}>
@@ -330,31 +343,6 @@ function Monitor({ def, hovered, onHover }: MonitorProps) {
         </Html>
       </group>
 
-      {/* oversized interaction hitbox — thin slab flush with the screen so the
-          frame, bezel and surrounding air all catch the pointer, while props
-          mounted in front (light bar) still win their own raycasts */}
-      <mesh
-        position={[0, 0, 0]}
-        visible={false}
-        onClick={(e) => {
-          e.stopPropagation();
-          const id = resolveMonitor(e.ray, e.point);
-          focus(focused === id ? null : id);
-        }}
-        onPointerMove={handleMove}
-        onPointerOver={handleMove}
-        onPointerOut={() => {
-          // overlapping neighbor hitboxes fire out-of-order; only the monitor
-          // that currently owns the hover may clear it
-          if (hovered) {
-            onHover(null);
-            setHint(null);
-            document.body.style.cursor = 'auto';
-          }
-        }}
-      >
-        <boxGeometry args={[(w + BEZEL * 2) * HIT_SCALE, (h + BEZEL * 2) * HIT_SCALE, 0.06]} />
-      </mesh>
     </group>
   );
 }
@@ -366,11 +354,70 @@ function Monitor({ def, hovered, onHover }: MonitorProps) {
 export default function MonitorWall() {
   const [hoveredId, setHoveredId] = useState<MonitorId | null>(null);
   const power = useCommandCenter((s) => s.power);
+  const setHint = useCommandCenter((s) => s.setHint);
+  const camera = useThree((s) => s.camera);
+  const gl = useThree((s) => s.gl);
   const lights = useRef<(any | null)[]>([]);
 
-  // hover state lives at wall level: overlapping hitboxes all agree on the
-  // resolved monitor, so exactly one shows feedback at a time
-  const onHover = useMemo(() => (id: MonitorId | null) => setHoveredId(id), []);
+  useEffect(() => {
+    const canvas = gl.domElement;
+
+    const clearHover = () => {
+      setHoveredId(null);
+      setHint(null);
+      document.body.style.cursor = 'auto';
+    };
+
+    const resolvePointer = (event: MouseEvent) =>
+      resolveScreenMonitorAt(event.clientX, event.clientY, camera, canvas);
+
+    const handleMove = (event: MouseEvent) => {
+      const state = useCommandCenter.getState();
+      if (state.focused || state.panelOpen) {
+        clearHover();
+        return;
+      }
+
+      const id = resolvePointer(event);
+      setHoveredId(id);
+      if (!id) {
+        setHint(null);
+        document.body.style.cursor = 'auto';
+        return;
+      }
+
+      const target = monitorById(id);
+      setHint(power ? `Open ${target.label} — ${target.subtitle}` : 'MAIN POWER OFFLINE — hit the red switch on the desk');
+      document.body.style.cursor = 'pointer';
+    };
+
+    const handleDown = (event: PointerEvent) => {
+      const state = useCommandCenter.getState();
+      const target = event.target instanceof Element ? event.target : null;
+      if (state.panelOpen || target?.closest('a,button,input,textarea,select,[role="button"]')) return;
+
+      const id = resolvePointer(event);
+      if (!id) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      state.focus(state.focused === id ? null : id);
+    };
+
+    window.addEventListener('pointermove', handleMove, { capture: true });
+    window.addEventListener('mousemove', handleMove, { capture: true });
+    window.addEventListener('pointerdown', handleDown, { capture: true });
+    window.addEventListener('blur', clearHover);
+    return () => {
+      window.removeEventListener('pointermove', handleMove, { capture: true });
+      window.removeEventListener('mousemove', handleMove, { capture: true });
+      window.removeEventListener('pointerdown', handleDown, { capture: true });
+      window.removeEventListener('blur', clearHover);
+      clearHover();
+    };
+  }, [camera, gl, power, setHint]);
 
   useFrame((_, dt) => {
     const k = Math.min(1, dt * 4);
@@ -383,7 +430,7 @@ export default function MonitorWall() {
   return (
     <group>
       {MONITORS.map((m) => (
-        <Monitor key={m.id} def={m} hovered={hoveredId === m.id} onHover={onHover} />
+        <Monitor key={m.id} def={m} hovered={hoveredId === m.id} />
       ))}
       {/* screen glow spilling onto the camp at dusk */}
       <pointLight ref={(el) => { lights.current[0] = el; }} position={[0, 2.5, -2.6]} intensity={7} distance={9} color="#9aa878" decay={2} />
