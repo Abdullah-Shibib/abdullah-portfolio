@@ -44,7 +44,7 @@ export default function NoLifeScreen({ expanded = false }: { expanded?: boolean 
         <div className="scanline" />
 
         {/* headline metrics */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className={`grid gap-2 ${expanded ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-4'}`}>
           {[
             ['112', 'peak players'],
             ['99.9%', '30d uptime'],
@@ -76,7 +76,7 @@ export default function NoLifeScreen({ expanded = false }: { expanded?: boolean 
         </div>
 
         {/* systems grid */}
-        <div className={`grid gap-1.5 ${expanded ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <div className={`grid gap-1.5 ${expanded ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3' : 'grid-cols-2'}`}>
           {SYSTEMS.slice(0, expanded ? 6 : 4).map((s) => (
             <div key={s.name} className="flex items-center justify-between rounded-md border border-teal-400/10 bg-teal-950/20 px-2 py-1.5">
               <div className="min-w-0">

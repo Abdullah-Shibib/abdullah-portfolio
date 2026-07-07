@@ -1,7 +1,9 @@
 'use client';
 
 import { useMemo, useRef, useState, useEffect, ReactNode } from 'react';
-import { Color, Group, InstancedMesh, MathUtils, Object3D, SpotLight } from 'three';
+import {
+  CatmullRomCurve3, Color, Group, InstancedMesh, MathUtils, Object3D, SpotLight, Vector3,
+} from 'three';
 import { ThreeEvent, useFrame } from '@react-three/fiber';
 import { useCommandCenter } from '@/lib/store';
 
@@ -124,11 +126,11 @@ function Mug() {
       <group ref={inner}>
         <mesh position={[0, 0.045, 0]}>
           <cylinderGeometry args={[0.04, 0.035, 0.09, 14]} />
-          <meshStandardMaterial color="#1a2422" roughness={0.35} />
+          <meshStandardMaterial color="#1e2220" roughness={0.35} />
         </mesh>
         <mesh position={[0.05, 0.05, 0]} rotation={[0, 0, Math.PI / 2]}>
           <torusGeometry args={[0.025, 0.007, 6, 12]} />
-          <meshStandardMaterial color="#1a2422" roughness={0.35} />
+          <meshStandardMaterial color="#1e2220" roughness={0.35} />
         </mesh>
         {/* dried residue */}
         <mesh position={[0, 0.088, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -242,14 +244,14 @@ function Radio() {
       </mesh>
       <mesh position={[0.08, 0.07, 0.048]}>
         <sphereGeometry args={[0.008, 8, 8]} />
-        <meshBasicMaterial color={on ? '#7ad9c6' : '#3a2f1c'} toneMapped={false} />
+        <meshBasicMaterial color={on ? '#b8c49a' : '#3a2f1c'} toneMapped={false} />
       </mesh>
       {/* EQ bars */}
       <group ref={bars} position={[-0.05, 0.05, 0.048]}>
         {[0, 1, 2, 3].map((i) => (
           <mesh key={i} position={[i * 0.022, 0, 0]} scale={[1, 0.08, 1]}>
             <boxGeometry args={[0.012, 0.05, 0.004]} />
-            <meshBasicMaterial color="#4ea89a" toneMapped={false} />
+            <meshBasicMaterial color="#8d9c6a" toneMapped={false} />
           </mesh>
         ))}
       </group>
@@ -302,7 +304,7 @@ function Keyboard() {
       </mesh>
       <instancedMesh ref={ref} args={[undefined, undefined, keys.length]}>
         <boxGeometry args={[0.026, 0.008, 0.026]} />
-        <meshStandardMaterial color="#241a15" roughness={0.5} emissive="#10241e" emissiveIntensity={0.7} />
+        <meshStandardMaterial color="#241a15" roughness={0.5} emissive="#1c2214" emissiveIntensity={0.7} />
       </instancedMesh>
       <KeyClockFix press={press} />
     </group>
@@ -391,24 +393,30 @@ function Paper({ home, ry, tint }: { home: [number, number, number]; ry: number;
 }
 
 /* ------------------------------------------------------------------ */
-/*  The rig — dusty RGB tower still breathing.                         */
+/*  The rig — clean tempered-glass tower, still breathing under dust.  */
 /* ------------------------------------------------------------------ */
 
 function PcTower() {
   const fans = useRef<Group>(null);
-  const [boost, setBoost] = useState(0);
+  const boost = useRef(0);
   const hue = useRef(new Color());
   const rings = useRef<any[]>([]);
+  const power = useCommandCenter((s) => s.power);
   const hover = useHoverCursor('The rig — click to rev the fans');
 
   useFrame(({ clock }, dt) => {
-    if (fans.current) fans.current.children.forEach((f, i) => (f.rotation.z += dt * (2.2 + boost * 14 + i)));
-    setBoost((b) => Math.max(0, b - dt * 0.5));
+    const alive = power ? 1 : 0.12;
+    if (fans.current) fans.current.children.forEach((f, i) => (f.rotation.z += dt * (2.2 + boost.current * 14 + i) * alive));
+    boost.current = Math.max(0, boost.current - dt * 0.5);
     const t = clock.elapsedTime * 0.12;
     rings.current.forEach((m, i) => {
-      if (m) m.emissive.copy(hue.current.setHSL((t + i * 0.18) % 1, 0.45, 0.32));
+      if (!m) return;
+      if (power) m.emissive.copy(hue.current.setHSL((t + i * 0.18) % 1, 0.28, 0.3));
+      else m.emissive.lerp(hue.current.set('#000000'), Math.min(1, dt * 3));
     });
   });
+
+  const CASE = { color: '#171614', metalness: 0.55, roughness: 0.45 };
 
   return (
     <group
@@ -417,64 +425,92 @@ function PcTower() {
       {...hover}
       onClick={(e) => {
         e.stopPropagation();
-        setBoost(1);
+        boost.current = 1;
       }}
     >
-      {/* case */}
-      <mesh position={[0, 0.26, 0]}>
+      {/* main chassis — clean rectangular tower */}
+      <mesh position={[0, 0.28, 0]}>
         <boxGeometry args={[0.24, 0.52, 0.48]} />
-        <meshStandardMaterial color="#17130f" metalness={0.5} roughness={0.55} />
+        <meshStandardMaterial {...CASE} />
       </mesh>
-      {/* smoked glass side */}
-      <mesh position={[0.125, 0.26, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[0.44, 0.48]} />
-        <meshStandardMaterial color="#0a0908" metalness={0.9} roughness={0.15} transparent opacity={0.85} />
+      {/* brushed top panel with recessed IO strip */}
+      <mesh position={[0, 0.542, 0]}>
+        <boxGeometry args={[0.235, 0.008, 0.475]} />
+        <meshStandardMaterial color="#1d1c19" metalness={0.7} roughness={0.35} />
+      </mesh>
+      <mesh position={[0, 0.547, 0.16]}>
+        <boxGeometry args={[0.12, 0.002, 0.06]} />
+        <meshStandardMaterial color="#0d0c0a" roughness={0.8} />
+      </mesh>
+      {/* full tempered-glass side, slightly inset in a thin frame */}
+      <mesh position={[0.123, 0.28, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[0.44, 0.46]} />
+        <meshPhysicalMaterial color="#0a0a09" metalness={0.4} roughness={0.08} transparent opacity={0.72} />
+      </mesh>
+      {[-0.225, 0.225].map((z) => (
+        <mesh key={z} position={[0.124, 0.28, z]}>
+          <boxGeometry args={[0.006, 0.5, 0.03]} />
+          <meshStandardMaterial color="#111009" metalness={0.7} roughness={0.4} />
+        </mesh>
+      ))}
+      {/* front mesh intake panel */}
+      <mesh position={[0, 0.28, 0.242]}>
+        <planeGeometry args={[0.22, 0.5]} />
+        <meshStandardMaterial color="#100f0d" metalness={0.4} roughness={0.85} />
+      </mesh>
+      {/* PSU shroud behind the glass */}
+      <mesh position={[0.1, 0.09, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <boxGeometry args={[0.46, 0.1, 0.04]} />
+        <meshStandardMaterial color="#131210" metalness={0.5} roughness={0.5} />
       </mesh>
       {/* RGB fan rings behind the glass */}
       <group ref={fans}>
-        {[0.42, 0.26, 0.1].map((y, i) => (
-          <group key={i} position={[0.12, y, -0.12]} rotation={[0, Math.PI / 2, 0]}>
+        {[0.44, 0.3, 0.16].map((y, i) => (
+          <group key={i} position={[0.11, y, -0.14]} rotation={[0, Math.PI / 2, 0]}>
             <mesh>
-              <torusGeometry args={[0.055, 0.008, 8, 20]} />
+              <torusGeometry args={[0.05, 0.007, 8, 20]} />
               <meshStandardMaterial
                 ref={(el) => {
                   rings.current[i] = el;
                 }}
-                color="#0d0b09"
+                color="#0d0c0b"
                 emissiveIntensity={0.85}
                 roughness={0.6}
               />
             </mesh>
             {[0, 1, 2, 3].map((b) => (
-              <mesh key={b} rotation={[0, 0, (b * Math.PI) / 2]} position={[0.02, 0.02, 0]}>
-                <boxGeometry args={[0.05, 0.012, 0.004]} />
+              <mesh key={b} rotation={[0, 0, (b * Math.PI) / 2]} position={[0.018, 0.018, 0]}>
+                <boxGeometry args={[0.045, 0.011, 0.004]} />
                 <meshStandardMaterial color="#1c1814" roughness={0.8} />
               </mesh>
             ))}
           </group>
         ))}
       </group>
-      {/* dust on top + power LED */}
-      <mesh position={[0, 0.525, 0]}>
-        <boxGeometry args={[0.23, 0.006, 0.46]} />
-        <meshStandardMaterial color="#57503f" roughness={1} transparent opacity={0.5} />
+      {/* low feet rails */}
+      {[-0.18, 0.18].map((z) => (
+        <mesh key={z} position={[0, 0.012, z]}>
+          <boxGeometry args={[0.22, 0.025, 0.05]} />
+          <meshStandardMaterial color="#0c0b0a" metalness={0.6} roughness={0.5} />
+        </mesh>
+      ))}
+      {/* dust film on top + power LED */}
+      <mesh position={[0, 0.548, -0.05]} rotation={[-Math.PI / 2, 0, 0.2]}>
+        <circleGeometry args={[0.11, 12]} />
+        <meshStandardMaterial color="#57503f" roughness={1} transparent opacity={0.4} />
       </mesh>
-      <mesh position={[-0.08, 0.5, 0.242]}>
+      <mesh position={[-0.08, 0.5, 0.243]}>
         <sphereGeometry args={[0.008, 8, 8]} />
-        <meshBasicMaterial color="#7ad9c6" toneMapped={false} />
+        <meshBasicMaterial color={power ? '#b8c49a' : '#33291f'} toneMapped={false} />
       </mesh>
-      {/* cable runs: power drop, DisplayPort toward the rig, ethernet along the floor */}
-      <mesh position={[-0.16, 0.45, -0.2]} rotation={[0.5, 0.2, 1.15]}>
-        <cylinderGeometry args={[0.011, 0.011, 0.55, 6]} />
+      {/* single tidy power cable dropping straight down the back corner */}
+      <mesh position={[-0.09, 0.18, -0.245]}>
+        <cylinderGeometry args={[0.01, 0.01, 0.36, 6]} />
         <meshStandardMaterial color="#141210" roughness={0.8} />
       </mesh>
-      <mesh position={[-0.3, 0.7, 0.02]} rotation={[0.15, 0, 1.0]}>
-        <cylinderGeometry args={[0.009, 0.009, 0.6, 6]} />
-        <meshStandardMaterial color="#101418" roughness={0.8} />
-      </mesh>
-      <mesh position={[-0.45, 0.02, 0.28]} rotation={[Math.PI / 2, 0, 0.5]}>
-        <cylinderGeometry args={[0.008, 0.008, 0.9, 6]} />
-        <meshStandardMaterial color="#16201a" roughness={0.8} />
+      <mesh position={[-0.25, 0.015, -0.1]} rotation={[Math.PI / 2, 0, 1.2]}>
+        <cylinderGeometry args={[0.009, 0.009, 0.5, 6]} />
+        <meshStandardMaterial color="#141210" roughness={0.8} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
         <circleGeometry args={[0.42, 16]} />
@@ -485,96 +521,348 @@ function PcTower() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Chair — pushed back, empty, waiting.                               */
+/*  Chair — a proper TITAN-class gaming chair, dusted over.            */
 /* ------------------------------------------------------------------ */
 
-function EmptyChair() {
-  const FABRIC = { color: '#191b1a', roughness: 0.85 };
-  const METAL = { color: '#2c2e2c', metalness: 0.75, roughness: 0.35 };
+function GamingChair() {
+  const LEATHER = { color: '#1d1e1c', roughness: 0.62, metalness: 0.05 };
+  const LEATHER_DARK = { color: '#161715', roughness: 0.68, metalness: 0.05 };
+  const STITCH = { color: '#5f6a4a', roughness: 0.9 };
+  const METAL = { color: '#3a3d3a', metalness: 0.85, roughness: 0.3 };
+  const PLASTIC = { color: '#121311', roughness: 0.55 };
+  const recline = -0.13;
+
   return (
     <group position={[0.25, 0, 0.35]} rotation={[0, 0.7, 0]}>
-      {/* contoured seat pan */}
-      <mesh position={[0, 0.46, 0.02]} scale={[1, 0.3, 1]}>
-        <sphereGeometry args={[0.27, 14, 10]} />
-        <meshStandardMaterial {...FABRIC} />
+      {/* ---- seat base ---- */}
+      {/* wide flat seat pan with a soft cushion crown */}
+      <mesh position={[0, 0.47, 0.01]}>
+        <boxGeometry args={[0.5, 0.09, 0.5]} />
+        <meshStandardMaterial {...LEATHER} />
       </mesh>
-      {/* worn patch where someone sat for years */}
-      <mesh position={[0, 0.545, 0.02]} rotation={[-Math.PI / 2, 0, 0]} scale={[1, 0.8, 1]}>
-        <circleGeometry args={[0.13, 14]} />
-        <meshStandardMaterial color="#242928" roughness={1} />
+      <mesh position={[0, 0.515, 0.01]} scale={[1, 0.28, 1]}>
+        <sphereGeometry args={[0.24, 14, 10]} />
+        <meshStandardMaterial {...LEATHER} />
       </mesh>
-      {/* curved mesh backrest shell */}
-      <mesh position={[0, 0.92, -0.24]} rotation={[0.06, Math.PI, 0]} scale={[1, 1, 0.45]}>
-        <cylinderGeometry args={[0.26, 0.23, 0.72, 14, 1, true, -Math.PI / 2.4, Math.PI / 1.2]} />
-        <meshStandardMaterial color="#202422" roughness={0.9} side={2} transparent opacity={0.92} />
-      </mesh>
-      {/* backrest frame rails */}
-      {[-0.24, 0.24].map((x) => (
-        <mesh key={x} position={[x, 0.92, -0.27]} rotation={[0.06, 0, x > 0 ? -0.08 : 0.08]}>
-          <cylinderGeometry args={[0.014, 0.016, 0.74, 8]} />
-          <meshStandardMaterial {...METAL} />
+      {/* raised side bolsters */}
+      {[-0.235, 0.235].map((x) => (
+        <mesh key={x} position={[x, 0.51, 0.01]} rotation={[Math.PI / 2, 0, 0]}>
+          <capsuleGeometry args={[0.045, 0.36, 4, 8]} />
+          <meshStandardMaterial {...LEATHER_DARK} />
         </mesh>
       ))}
-      {/* lumbar support bar */}
-      <mesh position={[0, 0.72, -0.235]} rotation={[0, 0, Math.PI / 2]}>
-        <capsuleGeometry args={[0.025, 0.4, 4, 8]} />
-        <meshStandardMaterial color="#15211d" roughness={0.8} />
+      {/* seat stitching — two long seams */}
+      {[-0.1, 0.1].map((x) => (
+        <mesh key={x} position={[x, 0.5165, 0.01]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[0.006, 0.42]} />
+          <meshStandardMaterial {...STITCH} />
+        </mesh>
+      ))}
+      {/* worn patch + dust film where someone sat for years */}
+      <mesh position={[0, 0.558, 0.03]} rotation={[-Math.PI / 2, 0, 0]} scale={[1, 0.85, 1]}>
+        <circleGeometry args={[0.12, 14]} />
+        <meshStandardMaterial color="#2b2d29" roughness={1} transparent opacity={0.8} />
       </mesh>
-      {/* headrest on stalk */}
-      <mesh position={[0, 1.34, -0.28]}>
-        <cylinderGeometry args={[0.012, 0.012, 0.12, 6]} />
-        <meshStandardMaterial {...METAL} />
+      <mesh position={[0, 0.561, 0.02]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.2, 16]} />
+        <meshStandardMaterial color="#4c463a" roughness={1} transparent opacity={0.16} />
       </mesh>
-      <mesh position={[0, 1.44, -0.27]} rotation={[-0.2, 0, 0]} scale={[1, 0.62, 0.5]}>
-        <sphereGeometry args={[0.16, 12, 9]} />
-        <meshStandardMaterial {...FABRIC} />
-      </mesh>
-      {/* armrests */}
-      {[-0.3, 0.3].map((x) => (
-        <group key={x} position={[x, 0.5, 0.02]}>
-          <mesh position={[0, 0.1, 0]}>
-            <boxGeometry args={[0.035, 0.2, 0.05]} />
-            <meshStandardMaterial {...METAL} />
+
+      {/* ---- backrest, slightly reclined ---- */}
+      <group position={[0, 0.52, -0.24]} rotation={[recline, 0, 0]}>
+        {/* main back panel */}
+        <mesh position={[0, 0.42, 0]}>
+          <boxGeometry args={[0.5, 0.82, 0.09]} />
+          <meshStandardMaterial {...LEATHER} />
+        </mesh>
+        {/* center cushion channel */}
+        <mesh position={[0, 0.42, 0.048]}>
+          <boxGeometry args={[0.24, 0.76, 0.012]} />
+          <meshStandardMaterial {...LEATHER_DARK} />
+        </mesh>
+        {/* vertical stitch seams framing the channel */}
+        {[-0.125, 0.125].map((x) => (
+          <mesh key={x} position={[x, 0.42, 0.056]}>
+            <planeGeometry args={[0.006, 0.74]} />
+            <meshStandardMaterial {...STITCH} />
           </mesh>
-          <mesh position={[0, 0.215, 0.03]}>
-            <boxGeometry args={[0.07, 0.03, 0.24]} />
-            <meshStandardMaterial color="#101312" roughness={0.7} />
+        ))}
+        {/* horizontal stitch bars */}
+        {[0.14, 0.42, 0.66].map((y) => (
+          <mesh key={y} position={[0, y, 0.056]}>
+            <planeGeometry args={[0.23, 0.006]} />
+            <meshStandardMaterial {...STITCH} />
+          </mesh>
+        ))}
+        {/* side wings */}
+        {[-0.26, 0.26].map((x) => (
+          <mesh key={x} position={[x, 0.62, 0.02]} rotation={[0, x > 0 ? -0.35 : 0.35, 0]}>
+            <boxGeometry args={[0.09, 0.42, 0.07]} />
+            <meshStandardMaterial {...LEATHER_DARK} />
+          </mesh>
+        ))}
+        {/* integrated lumbar bulge */}
+        <mesh position={[0, 0.2, 0.055]} scale={[1, 0.55, 0.3]}>
+          <sphereGeometry args={[0.18, 12, 9]} />
+          <meshStandardMaterial {...LEATHER} />
+        </mesh>
+        {/* headrest pillow strapped to the top */}
+        <mesh position={[0, 0.78, 0.06]} rotation={[0.12, 0, 0]} scale={[1, 0.55, 0.42]}>
+          <sphereGeometry args={[0.17, 12, 9]} />
+          <meshStandardMaterial {...LEATHER_DARK} />
+        </mesh>
+        <mesh position={[0, 0.87, 0.015]}>
+          <boxGeometry args={[0.09, 0.03, 0.11]} />
+          <meshStandardMaterial color="#101110" roughness={0.8} />
+        </mesh>
+        {/* embroidered top badge */}
+        <mesh position={[0, 0.72, 0.057]}>
+          <planeGeometry args={[0.1, 0.035]} />
+          <meshStandardMaterial color="#48523a" roughness={0.9} />
+        </mesh>
+        {/* recline hinges joining seat and back */}
+        {[-0.25, 0.25].map((x) => (
+          <mesh key={x} position={[x, 0.02, 0.03]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.045, 0.045, 0.03, 12]} />
+            <meshStandardMaterial {...PLASTIC} />
+          </mesh>
+        ))}
+        {/* dust settled along the top edge */}
+        <mesh position={[0, 0.845, 0.028]} rotation={[-Math.PI / 2 + recline, 0, 0]}>
+          <planeGeometry args={[0.42, 0.06]} />
+          <meshStandardMaterial color="#4c463a" roughness={1} transparent opacity={0.22} />
+        </mesh>
+      </group>
+
+      {/* ---- 4D armrests ---- */}
+      {[-0.31, 0.31].map((x) => (
+        <group key={x} position={[x, 0.47, 0.05]}>
+          {/* height post */}
+          <mesh position={[0, 0.09, 0]}>
+            <boxGeometry args={[0.04, 0.18, 0.055]} />
+            <meshStandardMaterial {...PLASTIC} />
+          </mesh>
+          {/* adjustment collar */}
+          <mesh position={[0, 0.155, 0]}>
+            <boxGeometry args={[0.05, 0.025, 0.065]} />
+            <meshStandardMaterial color="#1c1e1b" metalness={0.4} roughness={0.5} />
+          </mesh>
+          {/* padded top */}
+          <mesh position={[0, 0.2, 0.02]}>
+            <boxGeometry args={[0.085, 0.028, 0.26]} />
+            <meshStandardMaterial color="#141513" roughness={0.6} />
+          </mesh>
+          {/* mount arm into the seat pan */}
+          <mesh position={[x > 0 ? -0.035 : 0.035, 0.0, 0]} rotation={[0, 0, x > 0 ? 0.5 : -0.5]}>
+            <boxGeometry args={[0.03, 0.12, 0.05]} />
+            <meshStandardMaterial {...METAL} />
           </mesh>
         </group>
       ))}
-      {/* gas lift + tilt lever */}
-      <mesh position={[0, 0.28, 0]}>
-        <cylinderGeometry args={[0.028, 0.038, 0.34, 10]} />
-        <meshStandardMaterial {...METAL} />
+
+      {/* ---- mechanism, gas lift, base ---- */}
+      <mesh position={[0, 0.41, 0]}>
+        <boxGeometry args={[0.26, 0.05, 0.3]} />
+        <meshStandardMaterial {...PLASTIC} />
       </mesh>
-      <mesh position={[0.1, 0.4, 0.06]} rotation={[0, 0.4, Math.PI / 2]}>
-        <capsuleGeometry args={[0.008, 0.1, 4, 6]} />
+      {/* tilt lever */}
+      <mesh position={[0.16, 0.42, 0.1]} rotation={[0, 0.3, Math.PI / 2]}>
+        <capsuleGeometry args={[0.009, 0.09, 4, 6]} />
         <meshStandardMaterial color="#0e100f" roughness={0.6} />
       </mesh>
-      {/* 5-star base with caster wheels */}
+      {/* two-stage gas lift with boot */}
+      <mesh position={[0, 0.32, 0]}>
+        <cylinderGeometry args={[0.024, 0.024, 0.18, 12]} />
+        <meshStandardMaterial {...METAL} />
+      </mesh>
+      <mesh position={[0, 0.19, 0]}>
+        <cylinderGeometry args={[0.034, 0.042, 0.16, 12]} />
+        <meshStandardMaterial color="#181a18" metalness={0.5} roughness={0.5} />
+      </mesh>
+      {/* 5-star aluminum base with casters */}
       {[0, 1, 2, 3, 4].map((i) => {
-        const a = (i / 5) * Math.PI * 2;
+        const a = (i / 5) * Math.PI * 2 + 0.3;
         return (
           <group key={i} rotation={[0, a, 0]}>
-            <mesh position={[0, 0.075, 0.2]} rotation={[0.12, 0, 0]}>
-              <boxGeometry args={[0.045, 0.035, 0.36]} />
+            {/* tapered arm, slight downward sweep */}
+            <mesh position={[0, 0.085, 0.17]} rotation={[0.22, 0, 0]}>
+              <boxGeometry args={[0.05, 0.032, 0.34]} />
               <meshStandardMaterial {...METAL} />
             </mesh>
-            <mesh position={[0, 0.045, 0.36]}>
-              <boxGeometry args={[0.03, 0.05, 0.04]} />
-              <meshStandardMaterial color="#101110" roughness={0.5} />
+            {/* caster fork + wheel */}
+            <mesh position={[0, 0.05, 0.33]}>
+              <boxGeometry args={[0.028, 0.05, 0.035]} />
+              <meshStandardMaterial {...PLASTIC} />
             </mesh>
-            <mesh position={[0.012, 0.032, 0.37]} rotation={[0, 0, Math.PI / 2]}>
-              <torusGeometry args={[0.026, 0.012, 6, 12]} />
-              <meshStandardMaterial color="#181a19" roughness={0.6} />
+            <mesh position={[0.014, 0.032, 0.34]} rotation={[0, 0, Math.PI / 2]}>
+              <torusGeometry args={[0.028, 0.013, 6, 14]} />
+              <meshStandardMaterial color="#181a19" roughness={0.55} />
             </mesh>
           </group>
         );
       })}
-      {/* dust film settled on the seat */}
-      <mesh position={[0, 0.548, 0.02]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.24, 16]} />
-        <meshStandardMaterial color="#4c463a" roughness={1} transparent opacity={0.18} />
+      {/* soft shadow */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.011, 0]}>
+        <circleGeometry args={[0.42, 16]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.32} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Emergency power switch — kills the whole monitor wall.             */
+/* ------------------------------------------------------------------ */
+
+function EmergencySwitch() {
+  const { power, togglePower, setHint } = useCommandCenter();
+  const button = useRef<Group>(null);
+  const pressT = useRef(-10);
+
+  useFrame(({ clock }) => {
+    // chunky press: sink fast, rise slow
+    const age = clock.elapsedTime - pressT.current;
+    const sink = age < 0.12 ? age / 0.12 : age < 0.5 ? 1 - (age - 0.12) / 0.38 : 0;
+    if (button.current) button.current.position.y = 0.055 - sink * 0.02;
+  });
+
+  return (
+    <group
+      position={[-0.68, TOP, -0.6]}
+      rotation={[0, 0.32, 0]}
+      onClick={(e) => {
+        e.stopPropagation();
+        pressT.current = -1; // stamped with scene time by SwitchClock next frame
+        togglePower();
+        setHint(power ? 'EMERGENCY POWER - bring the monitors back online' : 'EMERGENCY POWER - slam it to kill the wall');
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        document.body.style.cursor = 'pointer';
+        setHint(power ? 'EMERGENCY POWER - slam it to kill the wall' : 'EMERGENCY POWER - bring the monitors back online');
+      }}
+      onPointerOut={() => {
+        document.body.style.cursor = 'auto';
+        setHint(null);
+      }}
+    >
+      <SwitchClock pressT={pressT} />
+      {/* generous touch/click volume around the switch housing */}
+      <mesh visible={false} position={[0, 0.075, 0]}>
+        <boxGeometry args={[0.46, 0.2, 0.46]} />
+      </mesh>
+      {/* heavy base plate bolted to the desk */}
+      <mesh position={[0, 0.012, 0]}>
+        <boxGeometry args={[0.2, 0.024, 0.2]} />
+        <meshStandardMaterial color="#2e3230" metalness={0.7} roughness={0.4} />
+      </mesh>
+      {[-0.082, 0.082].flatMap((x) =>
+        [-0.082, 0.082].map((z) => (
+          <mesh key={`${x}${z}`} position={[x, 0.026, z]}>
+            <cylinderGeometry args={[0.008, 0.008, 0.006, 6]} />
+            <meshStandardMaterial color="#1a1c1a" metalness={0.8} roughness={0.3} />
+          </mesh>
+        )),
+      )}
+      {/* hazard chevrons around the rim */}
+      {[0, 1, 2, 3].map((i) => (
+        <mesh key={i} position={[Math.sin(i * Math.PI / 2) * 0.09, 0.0245, Math.cos(i * Math.PI / 2) * 0.09]} rotation={[-Math.PI / 2, 0, i * Math.PI / 2 + Math.PI / 4]}>
+          <planeGeometry args={[0.05, 0.014]} />
+          <meshStandardMaterial color="#8a7a3a" roughness={0.9} />
+        </mesh>
+      ))}
+      {/* raised housing collar */}
+      <mesh position={[0, 0.045, 0]}>
+        <cylinderGeometry args={[0.075, 0.085, 0.045, 12]} />
+        <meshStandardMaterial color="#242826" metalness={0.65} roughness={0.45} />
+      </mesh>
+      {/* protective side guards */}
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.075, 0.07, 0]} rotation={[0, 0, s * -0.25]}>
+          <boxGeometry args={[0.012, 0.075, 0.13]} />
+          <meshStandardMaterial color="#2e3230" metalness={0.7} roughness={0.4} />
+        </mesh>
+      ))}
+      {/* the big red mushroom button */}
+      <group ref={button} position={[0, 0.055, 0]}>
+        <mesh position={[0, 0.018, 0]}>
+          <cylinderGeometry args={[0.052, 0.056, 0.036, 16]} />
+          <meshStandardMaterial color="#7a2018" roughness={0.5} />
+        </mesh>
+        <mesh position={[0, 0.04, 0]} scale={[1, 0.45, 1]}>
+          <sphereGeometry args={[0.052, 16, 10]} />
+          <meshStandardMaterial color="#8a2820" roughness={0.42} />
+        </mesh>
+        {/* worn paint ring */}
+        <mesh position={[0, 0.037, 0]}>
+          <torusGeometry args={[0.05, 0.004, 6, 20]} />
+          <meshStandardMaterial color="#5a1a14" roughness={0.7} />
+        </mesh>
+      </group>
+      {/* status lamp — green while the wall is live */}
+      <mesh position={[0.088, 0.032, 0.06]}>
+        <sphereGeometry args={[0.009, 8, 8]} />
+        <meshBasicMaterial color={power ? '#9ab86a' : '#3a2a20'} toneMapped={false} />
+      </mesh>
+      {/* stenciled label plate */}
+      <mesh position={[0, 0.026, 0.098]} rotation={[-0.35, 0, 0]}>
+        <planeGeometry args={[0.13, 0.028]} />
+        <meshStandardMaterial color="#c9c4ae" roughness={0.95} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Stamps the press time with the scene clock (same trick as the keyboard). */
+function SwitchClock({ pressT }: { pressT: React.MutableRefObject<number> }) {
+  useFrame(({ clock }) => {
+    if (pressT.current === -1) pressT.current = clock.elapsedTime;
+  });
+  return null;
+}
+
+/** Conduit from the switch, over the desk edge and up to the monitor wall. */
+function SwitchWiring() {
+  const curves = useMemo(() => {
+    const trunk = new CatmullRomCurve3([
+      new Vector3(-0.68, TOP + 0.01, -0.66),
+      new Vector3(-0.75, TOP - 0.02, -1.1),
+      new Vector3(-0.8, 0.4, -1.35),
+      new Vector3(-0.6, 0.08, -2.4),
+      new Vector3(-0.2, 0.06, -3.6),
+      new Vector3(0, 0.5, -4.35),
+    ]);
+    const branchL = new CatmullRomCurve3([
+      new Vector3(0, 0.5, -4.35),
+      new Vector3(-1.6, 1.2, -4.3),
+      new Vector3(-2.84, 1.6, -4.15),
+      new Vector3(-4.4, 2.0, -3.8),
+    ]);
+    const branchC = new CatmullRomCurve3([
+      new Vector3(0, 0.5, -4.35),
+      new Vector3(0, 1.4, -4.32),
+      new Vector3(0, 2.2, -4.3),
+    ]);
+    const branchR = new CatmullRomCurve3([
+      new Vector3(0, 0.5, -4.35),
+      new Vector3(1.6, 1.2, -4.3),
+      new Vector3(2.84, 1.6, -4.15),
+      new Vector3(4.4, 2.0, -3.8),
+    ]);
+    return [trunk, branchL, branchC, branchR];
+  }, []);
+  return (
+    <group>
+      {curves.map((c, i) => (
+        <mesh key={i}>
+          <tubeGeometry args={[c, 24, i === 0 ? 0.014 : 0.009, 5]} />
+          <meshStandardMaterial color={i === 0 ? '#1c1e1a' : '#141512'} roughness={0.8} />
+        </mesh>
+      ))}
+      {/* junction box at the scaffold base */}
+      <mesh position={[0, 0.5, -4.38]}>
+        <boxGeometry args={[0.12, 0.16, 0.06]} />
+        <meshStandardMaterial color="#2e3230" metalness={0.6} roughness={0.5} />
       </mesh>
     </group>
   );
@@ -601,7 +889,7 @@ function Phone() {
         </mesh>
         <mesh position={[0, 0.0125, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[0.066, 0.14]} />
-          <meshStandardMaterial ref={screen} color="#050607" emissive="#3a5c50" emissiveIntensity={0} roughness={0.3} />
+          <meshStandardMaterial ref={screen} color="#050607" emissive="#4a5540" emissiveIntensity={0} roughness={0.3} />
         </mesh>
       </group>
     </Draggable>
@@ -628,7 +916,7 @@ function IdBadge() {
         {/* lanyard strap snaking off */}
         <mesh position={[0.08, 0.003, 0.1]} rotation={[-Math.PI / 2, 0, 0.8]}>
           <planeGeometry args={[0.02, 0.24]} />
-          <meshStandardMaterial color="#24403a" roughness={1} />
+          <meshStandardMaterial color="#2c3a2a" roughness={1} />
         </mesh>
       </group>
     </Draggable>
@@ -658,7 +946,7 @@ export default function DeskArea() {
         </mesh>
         <mesh position={[0, 0.75, 0.37]}>
           <boxGeometry args={[1.85, 0.012, 0.012]} />
-          <meshBasicMaterial color="#6ec4b4" toneMapped={false} />
+          <meshBasicMaterial color="#9aa878" toneMapped={false} />
         </mesh>
         {[-1.6, -0.85, 0.85, 1.6].map((x) => (
           <mesh key={x} position={[x, 0.38, Math.abs(x) > 1 ? 0.15 : 0]}>
@@ -684,7 +972,7 @@ export default function DeskArea() {
           {[-0.055, 0.055].map((x) => (
             <mesh key={x} position={[x, 0.16, 0]}>
               <sphereGeometry args={[0.025, 10, 10]} />
-              <meshStandardMaterial color="#18110c" roughness={0.6} emissive="#0e2a24" emissiveIntensity={0.6} />
+              <meshStandardMaterial color="#18110c" roughness={0.6} emissive="#232a18" emissiveIntensity={0.6} />
             </mesh>
           ))}
         </group>
@@ -704,15 +992,17 @@ export default function DeskArea() {
       <Notebook />
       <Flashlight />
       <Radio />
-      <UsbDrive home={[0.82, TOP, -0.6]} tint="#3a4a5c" />
+      <UsbDrive home={[0.82, TOP, -0.6]} tint="#3a4a3c" />
       <UsbDrive home={[0.87, TOP, -0.66]} tint="#5c3a3a" />
       <Paper home={[-0.15, TOP + 0.002, -1.02]} ry={0.25} tint="#b8b09a" />
       <Paper home={[0.12, TOP + 0.004, -1.06]} ry={-0.4} tint="#c4bca6" />
       <Phone />
       <IdBadge />
 
+      <EmergencySwitch />
+      <SwitchWiring />
       <PcTower />
-      <EmptyChair />
+      <GamingChair />
     </group>
   );
 }

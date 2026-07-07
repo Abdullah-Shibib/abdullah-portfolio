@@ -7,15 +7,31 @@ import gsap from 'gsap';
 import { DEFAULT_CAMERA, monitorById, monitorCamera } from '@/lib/data';
 import { useCommandCenter } from '@/lib/store';
 
+/** Room view compensation for narrow (portrait) viewports: pull back so the
+ *  whole monitor wall still fits in frame. */
+function roomCamera(aspect: number) {
+  const widen = Math.min(2.1, Math.max(1, 1.35 / Math.max(aspect, 0.4)));
+  return {
+    position: new Vector3(
+      DEFAULT_CAMERA.position.x,
+      DEFAULT_CAMERA.position.y + (widen - 1) * 0.25,
+      DEFAULT_CAMERA.position.z + (widen - 1) * 3.6,
+    ),
+    target: DEFAULT_CAMERA.target.clone(),
+  };
+}
+
 /**
  * Cinematic camera: GSAP flights between the room view and each monitor,
  * with idle breathing and gentle mouse parallax layered on top.
  */
 export default function CameraRig() {
   const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
   const focused = useCommandCenter((s) => s.focused);
   const booted = useCommandCenter((s) => s.booted);
   const { setTransitioning, setPanelOpen } = useCommandCenter.getState();
+  const aspect = size.width / Math.max(1, size.height);
 
   // GSAP animates these; useFrame composes them with breathing + parallax.
   const base = useMemo(
@@ -29,33 +45,36 @@ export default function CameraRig() {
   );
   const mouse = useRef({ x: 0, y: 0 });
   const look = useMemo(() => new Vector3(), []);
+  const touch = useRef(false);
 
   /* Slow entry dolly once the boot screen clears. */
   useEffect(() => {
     if (!booted) return;
+    const room = roomCamera(aspect);
     if (window.location.search.includes('fast')) {
-      base.pos.copy(DEFAULT_CAMERA.position);
+      base.pos.copy(room.position);
       return;
     }
     gsap.to(base.pos, {
-      x: DEFAULT_CAMERA.position.x,
-      y: DEFAULT_CAMERA.position.y,
-      z: DEFAULT_CAMERA.position.z,
+      x: room.position.x,
+      y: room.position.y,
+      z: room.position.z,
       duration: 3.2,
       ease: 'power2.inOut',
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booted, base]);
 
-  /* Fly to the focused monitor / back to the room. */
+  /* Fly to the focused monitor / back to the room.
+     Re-runs on viewport aspect change so orientation flips reframe cleanly. */
   useEffect(() => {
-    const dest = focused
-      ? monitorCamera(monitorById(focused))
-      : { position: DEFAULT_CAMERA.position, target: DEFAULT_CAMERA.target };
+    if (!booted) return;
+    const dest = focused ? monitorCamera(monitorById(focused), aspect) : roomCamera(aspect);
 
     setTransitioning(true);
     const instant = window.location.search.includes('fast'); // dev flag: skip cinematics
     const tl = gsap.timeline({
-      defaults: { duration: instant ? 0.05 : 1.5, ease: 'power3.inOut' },
+      defaults: { duration: instant ? 0.05 : 1.35, ease: 'power3.inOut' },
       onComplete: () => {
         setTransitioning(false);
         if (focused) setPanelOpen(true);
@@ -67,11 +86,16 @@ export default function CameraRig() {
     return () => {
       tl.kill();
     };
-  }, [focused, base, setTransitioning, setPanelOpen]);
+  }, [focused, base, aspect, booted, setTransitioning, setPanelOpen]);
 
-  /* Mouse parallax source. */
+  /* Mouse parallax source — skipped for touch pointers so phones don't
+     lurch on every tap. */
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') {
+        touch.current = true;
+        return;
+      }
       mouse.current.x = (e.clientX / window.innerWidth) * 2 - 1;
       mouse.current.y = (e.clientY / window.innerHeight) * 2 - 1;
     };

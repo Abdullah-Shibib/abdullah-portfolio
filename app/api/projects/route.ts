@@ -87,12 +87,13 @@ export async function GET() {
   let dirs: string[] = [];
   try {
     dirs = readdirSync(PROJECTS_DIR).filter((d) => {
+      if (d.startsWith('.')) return false;
       try {
         return statSync(join(PROJECTS_DIR, d)).isDirectory();
       } catch {
         return false;
       }
-    });
+    }).sort((a, b) => a.localeCompare(b));
   } catch {
     return NextResponse.json({ projects: [], error: `Projects folder not found: ${PROJECTS_DIR}` }, { status: 200 });
   }
@@ -106,9 +107,9 @@ export async function GET() {
 
     return {
       id: folder,
-      name: folder.replace(/-+$/, '').replace(/-/g, ' '),
+      name: folder.replace(/-+$/, '').replace(/[-_]+/g, ' ').trim(),
       description: description || 'See the repository for details.',
-      tech: Array.from(tech).slice(0, 6),
+      tech: Array.from(tech).sort((a, b) => a.localeCompare(b)).slice(0, 6),
       link: gitRemote(dir) || `https://github.com/Abdullah-Shibib/${folder}`,
     };
   });

@@ -13,7 +13,7 @@ export default function TimelineScreen({ expanded = false }: { expanded?: boolea
         <span className="font-mono text-[10px] text-teal-400/70">2021 — 2026</span>
       </div>
 
-      <div className={`screen-body ${expanded ? 'flex gap-6' : ''}`}>
+      <div className={`screen-body ${expanded ? 'flex flex-col gap-4 overflow-y-auto md:flex-row md:gap-6' : ''}`}>
         <div className="scanline" />
 
         <div className="relative flex-1 pl-4">
@@ -47,7 +47,7 @@ export default function TimelineScreen({ expanded = false }: { expanded?: boolea
         </div>
 
         {expanded && (
-          <div className="w-80 space-y-3">
+          <div className="w-full space-y-3 md:w-80 md:shrink-0">
             <p className="font-display text-[10px] tracking-[0.3em] text-teal-300">FIELD EXPERIENCE</p>
             {EXPERIENCE.map((x) => (
               <div key={x.id} className="rounded-lg border border-teal-400/15 bg-teal-950/20 p-3">

@@ -16,17 +16,18 @@ let cache: RepoProject[] | null = null;
 
 const FALLBACK: RepoProject[] = PROJECTS.map((p) => ({
   id: p.id, name: p.name, description: p.tagline, tech: p.stack,
-  link: 'https://github.com/Abdullah-Shibib',
+  link: `https://github.com/Abdullah-Shibib/${p.id}`,
 }));
 
 /** DEPLOYMENTS — cards generated live from the local "GitHub Projects" folder. */
 export default function ProjectsScreen({ expanded = false }: { expanded?: boolean }) {
   const [projects, setProjects] = useState<RepoProject[] | null>(cache);
 
+  // cache only seeds the first paint — every mount re-scans the folder so
+  // added/removed repos show up without a reload
   useEffect(() => {
-    if (cache) return;
     let alive = true;
-    fetch('/api/projects')
+    fetch('/api/projects', { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => {
         if (!alive) return;
@@ -34,7 +35,7 @@ export default function ProjectsScreen({ expanded = false }: { expanded?: boolea
         cache = list;
         setProjects(list);
       })
-      .catch(() => alive && setProjects(FALLBACK));
+      .catch(() => alive && setProjects((p) => p ?? FALLBACK));
     return () => {
       alive = false;
     };
@@ -54,7 +55,7 @@ export default function ProjectsScreen({ expanded = false }: { expanded?: boolea
       <div
         className={`screen-body panel-scroll ${
           expanded
-            ? 'grid grid-cols-1 content-start gap-3 !overflow-y-auto md:grid-cols-2'
+            ? 'grid grid-cols-1 content-start gap-3 !overflow-y-auto scroll-smooth md:grid-cols-2'
             : 'flex flex-col gap-2 overflow-hidden'
         }`}
       >

@@ -12,7 +12,9 @@ Press `Esc` to fade smoothly back into the room.
 
 The desk itself is interactive — drag the coffee mug or loose papers and they spring
 back with real inertia, click the notebook to flip it open, switch on the flashlight
-or the radio, spin a USB drive, wake a dead phone for a few seconds.
+or the radio, spin a USB drive, wake a dead phone for a few seconds. An industrial
+emergency switch sits bolted to the desk: slam it and every monitor dies with a CRT
+shutdown into NO SIGNAL (light bars included); hit it again and the wall boots back up.
 
 ## Run it
 
@@ -27,14 +29,18 @@ Everything content-related (links, skills, timeline, projects fallback) lives in
 live via an API route — see [Dynamic projects](#dynamic-projects) below.
 
 Dev flags: `/?fast=1` skips the boot intro; `&focus=<monitor-id>` deep-links a monitor
-(e.g. `network`, `github`, `ml`, `projects`, `timeline`, `skills`, `contact`).
+(e.g. `network`, `about`, `ml`, `projects`, `timeline`, `skills`, `contact`).
+
+Fully responsive: phones and tablets get a pulled-back camera that keeps the wall in
+frame in portrait or landscape, touch-friendly nav chips, scrollable panels, and a
+reduced render budget (capped DPR, lighter vegetation).
 
 ## The monitors
 
 | Monitor | Shows |
 | --- | --- |
 | **Global Telemetry** | An interactive orthographic globe — drag to rotate with inertia, scroll to zoom, hover a node for city/latency/uptime, click to trace its routes. Fictional-but-technically-believable distributed-systems telemetry (deploys, build health, SLOs) — not real employer data. |
-| **CI/CD & Pipelines** | A live-generated GitHub contribution heatmap, recent commits, and language split. |
+| **Personnel File** | The About Me dossier — Carleton University, both Ericsson internships, NoLife RP leadership, and focus areas, straight from the resume. |
 | **Capabilities** | Rotating tech icons with proficiency bars. |
 | **NoLife RP Command** | Leadership dashboard for a 100+ concurrent-player FiveM server — population curve, systems status, Stripe/ops metrics. |
 | **Mission Log** | Career timeline: education, internships, and leadership milestones. |

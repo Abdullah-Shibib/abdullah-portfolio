@@ -34,7 +34,7 @@ export default function ContactScreen({ expanded = false }: { expanded?: boolean
           </div>
         )}
 
-        <div className={`grid gap-2 ${expanded ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <div className={`grid gap-2 ${expanded ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
           {CONTACT_LINKS.map((l) => {
             const Icon = ICONS[l.id];
             return (

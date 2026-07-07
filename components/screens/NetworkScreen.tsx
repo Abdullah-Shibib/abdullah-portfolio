@@ -180,10 +180,10 @@ function Globe({ interactive }: { interactive: boolean }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full select-none" preserveAspectRatio="xMidYMid meet">
         <defs>
           <radialGradient id="gAtmo" cx="50%" cy="45%">
-            <stop offset="62%" stopColor="rgba(78,168,154,0)" />
-            <stop offset="86%" stopColor="rgba(78,168,154,0.10)" />
-            <stop offset="97%" stopColor="rgba(94,196,176,0.22)" />
-            <stop offset="100%" stopColor="rgba(94,196,176,0)" />
+            <stop offset="62%" stopColor="rgba(141,156,106,0)" />
+            <stop offset="86%" stopColor="rgba(141,156,106,0.10)" />
+            <stop offset="97%" stopColor="rgba(154,168,120,0.22)" />
+            <stop offset="100%" stopColor="rgba(154,168,120,0)" />
           </radialGradient>
           <radialGradient id="gSurf" cx="42%" cy="36%">
             <stop offset="0%" stopColor="rgba(90,80,44,0.55)" />
@@ -195,7 +195,7 @@ function Globe({ interactive }: { interactive: boolean }) {
         {/* atmosphere halo */}
         <circle cx={cx} cy={cy} r={R * 1.22} fill="url(#gAtmo)" />
         {/* body */}
-        <circle cx={cx} cy={cy} r={R} fill="url(#gSurf)" stroke="rgba(94,196,176,0.35)" strokeWidth="1" />
+        <circle cx={cx} cy={cy} r={R} fill="url(#gSurf)" stroke="rgba(154,168,120,0.35)" strokeWidth="1" />
 
         {/* graticule — projected parallels & meridians */}
         {[-60, -30, 0, 30, 60].map((lat) => {
@@ -208,7 +208,7 @@ function Globe({ interactive }: { interactive: boolean }) {
               pen = true;
             } else pen = false;
           }
-          return <path key={`la${lat}`} d={d} fill="none" stroke="rgba(94,196,176,0.14)" strokeWidth="0.7" />;
+          return <path key={`la${lat}`} d={d} fill="none" stroke="rgba(154,168,120,0.14)" strokeWidth="0.7" />;
         })}
         {Array.from({ length: 12 }, (_, i) => {
           const lon = i * 30 - 180;
@@ -221,7 +221,7 @@ function Globe({ interactive }: { interactive: boolean }) {
               pen = true;
             } else pen = false;
           }
-          return <path key={`lo${lon}`} d={d} fill="none" stroke="rgba(94,196,176,0.10)" strokeWidth="0.7" />;
+          return <path key={`lo${lon}`} d={d} fill="none" stroke="rgba(154,168,120,0.10)" strokeWidth="0.7" />;
         })}
 
         {/* cables */}
@@ -230,12 +230,12 @@ function Globe({ interactive }: { interactive: boolean }) {
             <path
               d={a.d}
               fill="none"
-              stroke={a.active ? 'rgba(150,230,212,0.95)' : 'rgba(94,196,176,0.45)'}
+              stroke={a.active ? 'rgba(214,220,180,0.95)' : 'rgba(154,168,120,0.45)'}
               strokeWidth={a.active ? 1.6 : 1}
               className="dash-flow"
             />
             {a.packet.z > 0 && (
-              <circle cx={a.packet.sx} cy={a.packet.sy} r={a.active ? 2.6 : 1.8} fill={a.active ? '#a8ead9' : '#5ec4b0'} />
+              <circle cx={a.packet.sx} cy={a.packet.sy} r={a.active ? 2.6 : 1.8} fill={a.active ? '#dde3c2' : '#9aa878'} />
             )}
           </g>
         ))}
@@ -259,9 +259,9 @@ function Globe({ interactive }: { interactive: boolean }) {
               }}
             >
               {front && (n.hub || selected === n.id) && (
-                <circle cx={n.p.sx} cy={n.p.sy} r={7 * pulse} fill="none" stroke="rgba(150,230,212,0.4)" strokeWidth="1" />
+                <circle cx={n.p.sx} cy={n.p.sy} r={7 * pulse} fill="none" stroke="rgba(214,220,180,0.4)" strokeWidth="1" />
               )}
-              <circle cx={n.p.sx} cy={n.p.sy} r={(n.hub ? 3.4 : 2.3) * (front ? pulse : 1)} fill={n.hub ? '#8ae0d0' : '#5ec4b0'} />
+              <circle cx={n.p.sx} cy={n.p.sy} r={(n.hub ? 3.4 : 2.3) * (front ? pulse : 1)} fill={n.hub ? '#c6cfa4' : '#9aa878'} />
               {/* generous invisible hit area */}
               {interactive && front && <circle cx={n.p.sx} cy={n.p.sy} r={11} fill="transparent" />}
             </g>
@@ -320,14 +320,14 @@ export default function NetworkScreen({ expanded = false }: { expanded?: boolean
         </span>
       </div>
 
-      <div className="screen-body flex gap-3">
+      <div className={`screen-body ${expanded ? 'flex flex-col gap-3 overflow-y-auto md:flex-row md:overflow-hidden' : 'flex gap-3'}`}>
         <div className="scanline" />
 
-        <div className={`relative min-w-0 flex-1 ${expanded ? 'h-[430px]' : ''}`}>
+        <div className={`relative min-w-0 flex-1 ${expanded ? 'h-[300px] min-h-[260px] md:h-[430px]' : ''}`}>
           <Globe interactive={expanded} />
         </div>
 
-        <div className={`flex ${expanded ? 'w-64' : 'w-44'} shrink-0 flex-col gap-2`}>
+        <div className={`flex ${expanded ? 'w-full md:w-64' : 'w-44'} shrink-0 flex-col gap-2`}>
           <div className="grid grid-cols-2 gap-2">
             <div className="stat-tile">
               <div className="stat-value">{NODES.length}</div>

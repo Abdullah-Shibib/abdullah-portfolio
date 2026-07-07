@@ -26,6 +26,15 @@ export const metadata: Metadata = {
     'Interactive 3D portfolio of Abdullah Shibib: Data Engineer, Software Engineer, AI Developer.',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover' as const,
+  themeColor: '#0c0c09',
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sans.variable} ${display.variable} ${mono.variable}`}>

@@ -6,7 +6,7 @@ import { Vector3 } from 'three';
 
 export type MonitorId =
   | 'network'
-  | 'github'
+  | 'about'
   | 'ml'
   | 'projects'
   | 'timeline'
@@ -40,10 +40,10 @@ export const MONITORS: MonitorDef[] = [
     viewDistance: 3.1,
   },
   {
-    id: 'github',
-    label: 'GitHub',
-    title: 'CI/CD & PIPELINES',
-    subtitle: 'Commits, automation & repository health',
+    id: 'about',
+    label: 'About',
+    title: 'PERSONNEL FILE',
+    subtitle: 'Operator dossier — background & focus areas',
     position: [-2.84, 2.5, -4.08],
     yaw: 0.21,
     size: [1.22, 2.05],
@@ -108,9 +108,11 @@ export const monitorById = (id: MonitorId) =>
 export const monitorNormal = (m: MonitorDef) =>
   new Vector3(Math.sin(m.yaw), 0, Math.cos(m.yaw));
 
-/** Camera pose when a monitor is focused. */
-export const monitorCamera = (m: MonitorDef) => {
-  const n = monitorNormal(m).multiplyScalar(m.viewDistance);
+/** Camera pose when a monitor is focused. Narrow viewports (phones in
+ *  portrait) pull the camera back so the whole screen stays in frame. */
+export const monitorCamera = (m: MonitorDef, aspect = 16 / 9) => {
+  const widen = Math.min(2.4, Math.max(1, 1.45 / Math.max(aspect, 0.4)));
+  const n = monitorNormal(m).multiplyScalar(m.viewDistance * widen);
   return {
     position: new Vector3(...m.position).add(n),
     target: new Vector3(...m.position),
@@ -266,30 +268,61 @@ export const TIMELINE: Epoch[] = [
 ];
 
 export const KIND_COLORS: Record<Epoch['kind'], string> = {
-  Education: '#8ae0d0',
-  Internship: '#4ea89a',
-  Project: '#6aa88a',
-  Leadership: '#7ad9c6',
+  Education: '#c6cfa4',
+  Internship: '#8d9c6a',
+  Project: '#75855c',
+  Leadership: '#aeb98c',
 };
 
 /* ------------------------------------------------------------------ */
-/*  GitHub feed (representative).                                      */
+/*  About Me — the operator dossier (sourced from the resume).         */
 /* ------------------------------------------------------------------ */
 
-export const COMMITS = [
-  { repo: 'datawhisk', msg: 'feat: streaming sentiment pipeline', time: '2h' },
-  { repo: 'ci-health', msg: 'fix: dedupe flaky-test detector alerts', time: '9h' },
-  { repo: 'portfolio', msg: 'feat: command-center monitor wall', time: '1d' },
-  { repo: 'testnet-3d', msg: 'perf: instanced node meshes (60fps)', time: '2d' },
-  { repo: 'fivem-core', msg: 'feat: dynamic economy rebalancing', time: '4d' },
-  { repo: 'datawhisk', msg: 'chore: bump torch, retrain baseline', time: '5d' },
-];
+export const ABOUT = {
+  name: 'Abdullah Shibib',
+  callsign: 'OPERATOR — SHIBIB, A.',
+  summary:
+    'Software engineer who builds real-world systems — from ML pipelines at Ericsson to a 100+ player game server run like a product. Happiest where backend, data, and interactive experiences meet.',
+  education: {
+    school: 'Carleton University',
+    program: 'Honors Bachelor of Information Technology · IRM',
+    detail: 'Minor in Psychology — Ottawa, ON · Class of 2028',
+  },
+  posts: [
+    {
+      role: 'Data Engineer Intern',
+      org: 'Ericsson',
+      period: 'Jan 2026 — Present',
+      brief: 'ML model training workflows (TensorFlow/PyTorch), optimized Python data pipelines, and 3D telecom network visualizations for Lund & Kista.',
+    },
+    {
+      role: 'Software Engineer Intern',
+      org: 'Ericsson',
+      period: 'Sep — Dec 2025',
+      brief: 'CI/CD pipelines with GitHub Actions & Jenkins, GPU compute environments, and Python automation for build validation.',
+    },
+    {
+      role: 'Server Developer — Founder',
+      org: 'NoLife RP',
+      period: 'Leadership',
+      brief: 'Led a GTA V FiveM server with 100+ daily concurrent players — custom gameplay systems, Stripe billing ($3,500+ MRR), 99.9% uptime.',
+    },
+  ],
+  focus: [
+    'Backend Development',
+    'Machine Learning',
+    'Data Engineering',
+    'Full-Stack Development',
+    'Interactive 3D Experiences',
+    'Real-World Applications',
+  ],
+};
 
 export const LANGUAGES = [
-  { label: 'Python', pct: 38, color: '#4ea89a' },
-  { label: 'TypeScript', pct: 26, color: '#8ae0d0' },
-  { label: 'C++', pct: 16, color: '#6aa88a' },
-  { label: 'Lua', pct: 12, color: '#5ec4b0' },
+  { label: 'Python', pct: 38, color: '#8d9c6a' },
+  { label: 'TypeScript', pct: 26, color: '#c6cfa4' },
+  { label: 'C++', pct: 16, color: '#75855c' },
+  { label: 'Lua', pct: 12, color: '#a4b07e' },
   { label: 'Other', pct: 8, color: '#57534e' },
 ];
 

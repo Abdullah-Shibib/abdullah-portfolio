@@ -14,6 +14,11 @@ import DeskArea from './DeskArea';
 /* Shared golden-hour sun direction (mirrored in Experience's <Sky>). */
 export const SUN = [16, 6, -34] as const;
 
+/** Phones get a lighter vegetation budget — same look, fewer instances. */
+const LOW_POWER =
+  typeof window !== 'undefined' &&
+  (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 1);
+
 const dummy = new Object3D();
 const tmpColor = new Color();
 
@@ -165,6 +170,120 @@ interface BuildingProps {
   fireEscape?: boolean; waterTower?: boolean; antenna?: boolean; sapling?: boolean;
   /** heavy structural damage: collapsed roof, rebar, missing corner, rubble */
   ruined?: boolean;
+  /** an entire flank sheared away decades ago — exposed floors, rebar, ivy */
+  catastrophic?: boolean;
+}
+
+/** A whole section of the building sheared off at a slight angle. */
+function CatastrophicBreak({ w, h, d, side, seed }: { w: number; h: number; d: number; side: string; seed: number }) {
+  const ivy = useMemo(() => leafCluster(seed + 90, 'ivy'), [seed]);
+  const tilt = 0.13; // the collapse line leans — nothing shears clean
+  const bw = w * 0.44; // width of the missing section
+  const bx = w / 2 - bw / 2 + 0.03; // hugging the right flank
+  const rebar = useMemo(() => {
+    const r = seeded(seed + 7);
+    return Array.from({ length: 9 }, () => ({
+      dx: (r() - 0.5) * bw * 0.85,
+      dz: (r() - 0.5) * d * 0.7,
+      len: 0.5 + r() * 1.1,
+      bend: (r() - 0.5) * 1.4,
+      lean: (r() - 0.5) * 0.7,
+      lvl: 0.42 + r() * 0.5,
+    }));
+  }, [seed, bw, d]);
+  const chunks = useMemo(() => {
+    const r = seeded(seed + 13);
+    return Array.from({ length: 12 }, (_, i) => ({
+      x: bx + (r() - 0.5) * bw * 1.4 + (i % 3) * 0.3,
+      y: 0.12 + r() * 0.55,
+      z: d / 2 - 0.5 + r() * 2.6,
+      s: 0.18 + r() * 0.5,
+      ry: r() * Math.PI,
+      rz: (r() - 0.5) * 0.9,
+      dark: r() < 0.4,
+    }));
+  }, [seed, bx, bw, d]);
+
+  return (
+    <group>
+      {/* the void — a dark interior where the flank used to be, cut at an angle */}
+      <mesh position={[bx, h * 0.7, 0]} rotation={[0, 0, tilt]}>
+        <boxGeometry args={[bw, h * 0.62, d + 0.08]} />
+        <meshStandardMaterial color="#0b0a08" roughness={1} />
+      </mesh>
+      {/* jagged fracture edge running down the cut line */}
+      {[0.44, 0.58, 0.72, 0.86].map((f, i) => (
+        <mesh
+          key={`edge${i}`}
+          position={[bx - bw / 2 - 0.06 + (h * f - h * 0.7) * -tilt, h * f, 0]}
+          rotation={[0, 0, tilt + (i % 2 ? 0.18 : -0.14)]}
+        >
+          <boxGeometry args={[0.28 + (i % 2) * 0.2, h * 0.16, d + 0.12]} />
+          <meshStandardMaterial color={side} roughness={1} />
+        </mesh>
+      ))}
+      {/* exposed floor slabs — snapped short at ragged lengths */}
+      {[0.46, 0.58, 0.7, 0.82, 0.93].map((f, i) => (
+        <mesh
+          key={`slab${i}`}
+          position={[bx + (i % 2 ? 0.25 : -0.15), h * f, (i % 3 - 1) * 0.3]}
+          rotation={[0, 0, tilt * 0.4 + (i % 2 ? -0.03 : 0.04)]}
+        >
+          <boxGeometry args={[bw * (0.55 + (i % 3) * 0.18), 0.14, d * 0.88]} />
+          <meshStandardMaterial color="#605c50" roughness={1} />
+        </mesh>
+      ))}
+      {/* interior columns still standing between slabs */}
+      {[0.5, 0.62, 0.76].map((f, i) => (
+        <mesh key={`col${i}`} position={[bx + (i - 1) * bw * 0.28, h * f + 0.35, d * 0.15 * (i - 1)]}>
+          <cylinderGeometry args={[0.07, 0.07, h * 0.12, 6]} />
+          <meshStandardMaterial color="#4c483e" roughness={1} />
+        </mesh>
+      ))}
+      {/* hanging rebar — bent rods dangling off every slab edge */}
+      {rebar.map((rb, i) => (
+        <group key={`rb${i}`} position={[bx + rb.dx, h * rb.lvl, rb.dz]} rotation={[rb.bend * 0.4, 0, rb.lean]}>
+          <mesh position={[0, -rb.len / 2, 0]}>
+            <cylinderGeometry args={[0.014, 0.014, rb.len, 4]} />
+            <meshStandardMaterial color="#3d2c1c" metalness={0.55} roughness={0.65} />
+          </mesh>
+          <mesh position={[Math.sin(rb.bend) * 0.1, -rb.len, 0]} rotation={[0, 0, rb.bend]}>
+            <cylinderGeometry args={[0.012, 0.012, rb.len * 0.4, 4]} />
+            <meshStandardMaterial color="#46321f" metalness={0.55} roughness={0.65} />
+          </mesh>
+        </group>
+      ))}
+      {/* collapsed wall panel leaning against the base */}
+      <mesh position={[bx + bw * 0.3, h * 0.16, d / 2 + 1.1]} rotation={[0.9, 0.2, 0.12]}>
+        <boxGeometry args={[bw * 0.8, h * 0.28, 0.22]} />
+        <meshStandardMaterial color={side} roughness={1} />
+      </mesh>
+      {/* rubble field where the section came down */}
+      {chunks.map((c, i) => (
+        <mesh key={`ch${i}`} position={[c.x, c.y, c.z]} rotation={[c.ry, c.ry * 1.7, c.rz]}>
+          <boxGeometry args={[c.s * 1.5, c.s, c.s * 1.2]} />
+          <meshStandardMaterial color={c.dark ? '#4c483e' : side} roughness={1} />
+        </mesh>
+      ))}
+      {/* decades of ivy pouring through the opening */}
+      <mesh position={[bx - bw * 0.2, h * 0.52, d / 2 + 0.1]}>
+        <planeGeometry args={[bw * 0.9, h * 0.36]} />
+        <meshStandardMaterial map={ivy} transparent alphaTest={0.32} side={DoubleSide} roughness={1} />
+      </mesh>
+      <mesh position={[bx + bw * 0.25, h * 0.8, d / 2 + 0.08]} rotation={[0, 0, tilt]}>
+        <planeGeometry args={[bw * 0.6, h * 0.28]} />
+        <meshStandardMaterial map={ivy} transparent alphaTest={0.32} side={DoubleSide} roughness={1} />
+      </mesh>
+      {/* greenery rooted on the exposed slabs */}
+      {[0.58, 0.82].map((f, i) => (
+        <mesh key={`sv${i}`} position={[bx + 0.2 - i * 0.5, h * f + 0.24, d * 0.2]}>
+          <sphereGeometry args={[0.5 - i * 0.12, 7, 6]} />
+          <meshStandardMaterial color="#44522f" roughness={1} />
+        </mesh>
+      ))}
+      <Blob x={bx + bw * 0.2} z={d / 2 + 1.4} r={2.2} o={0.35} />
+    </group>
+  );
 }
 
 /** Structural damage kit for the most far-gone buildings. */
@@ -236,7 +355,7 @@ function StructuralDecay({ w, h, d, side }: { w: number; h: number; d: number; s
   );
 }
 
-function BrickBuilding({ x, z, w, h, floors, cols, tone = 0, decay = 0.5, rotY = 0, seed, fireEscape, waterTower, antenna, sapling, ruined }: BuildingProps) {
+function BrickBuilding({ x, z, w, h, floors, cols, tone = 0, decay = 0.5, rotY = 0, seed, fireEscape, waterTower, antenna, sapling, ruined, catastrophic }: BuildingProps) {
   const facade = useMemo(() => brickFacade({ seed, floors, cols, decay, tone }), [seed, floors, cols, decay, tone]);
   const side = ['#6a4a3a', '#7a6a50', '#5d5a50'][tone];
   const ivy = useMemo(() => leafCluster(seed + 40, 'ivy'), [seed]);
@@ -331,9 +450,15 @@ function BrickBuilding({ x, z, w, h, floors, cols, tone = 0, decay = 0.5, rotY =
           <planeGeometry args={[w * 0.24, h * 0.44]} />
           <meshStandardMaterial map={ivy} transparent alphaTest={0.32} side={DoubleSide} roughness={1} />
         </mesh>
+        {/* creeper climbing the shaded gable end */}
+        <mesh position={[-w / 2 - 0.06, h * 0.3, d * 0.1]} rotation={[0, -Math.PI / 2, 0]}>
+          <planeGeometry args={[d * 0.5, h * 0.55]} />
+          <meshStandardMaterial map={ivy} transparent alphaTest={0.32} side={DoubleSide} roughness={1} />
+        </mesh>
       </group>
 
       {ruined && <StructuralDecay w={w} h={h} d={d} side={side} />}
+      {catastrophic && <CatastrophicBreak w={w} h={h} d={d} side={side} seed={seed} />}
 
       <Blob x={0} z={d / 2 + 0.4} r={w * 0.55} o={0.3} />
     </group>
@@ -347,7 +472,7 @@ function NearBuildings() {
       <BrickBuilding x={-21} z={-13} w={5.5} h={8.5} floors={3} cols={3} tone={1} decay={0.85} rotY={0.3} seed={12} antenna ruined />
       <BrickBuilding x={13} z={-17} w={7} h={14.5} floors={5} cols={4} tone={2} decay={0.45} rotY={-0.14} seed={13} fireEscape antenna sapling />
       <BrickBuilding x={21.5} z={-13.5} w={5} h={9.5} floors={3} cols={3} tone={0} decay={0.9} rotY={-0.32} seed={14} waterTower sapling ruined />
-      <BrickBuilding x={-1.5} z={-27} w={9} h={16} floors={5} cols={5} tone={1} decay={0.5} seed={15} antenna waterTower />
+      <BrickBuilding x={-1.5} z={-27} w={9} h={16} floors={5} cols={5} tone={1} decay={0.65} seed={15} antenna waterTower catastrophic />
       <BrickBuilding x={8.5} z={-25} w={6} h={11} floors={4} cols={3} tone={0} decay={0.6} rotY={-0.08} seed={16} sapling />
     </group>
   );
@@ -480,7 +605,8 @@ function GrassField() {
   const clumps = useMemo(() => {
     const r = seeded(77);
     const arr: { x: number; z: number; s: number; rot: number; tint: number; kind: number; sway: number; phase: number }[] = [];
-    for (let i = 0; i < 1400; i++) {
+    const COUNT = LOW_POWER ? 1300 : 2200;
+    for (let i = 0; i < COUNT; i++) {
       let x = 0, z = 0;
       do {
         x = (r() - 0.5) * 50;
@@ -488,12 +614,25 @@ function GrassField() {
       } while (Math.abs(x) < 3.4 && z > -5.4 && z < 2.2);
       arr.push({
         x, z,
-        s: 0.45 + r() * r() * 1.15,
+        s: 0.5 + r() * r() * 1.3,
         rot: r() * Math.PI,
         tint: 0.7 + r() * 0.55,
         kind: r() < 0.14 ? 2 : r() < 0.55 ? 1 : 0,
-        sway: r() < 0.18 ? 0.5 + r() * 0.8 : 0,
+        sway: r() < 0.22 ? 0.5 + r() * 0.8 : 0,
         phase: r() * Math.PI * 2,
+      });
+    }
+    // weeds forcing up through the cracked asphalt and sidewalk seams
+    for (let i = 0; i < (LOW_POWER ? 60 : 110); i++) {
+      arr.push({
+        x: (r() - 0.5) * 44,
+        z: -12.4 + r() * 7.2,
+        s: 0.2 + r() * 0.45,
+        rot: r() * Math.PI,
+        tint: 0.55 + r() * 0.4,
+        kind: r() < 0.45 ? 2 : 1, // mostly dead & mixed — struggling growth
+        sway: 0,
+        phase: 0,
       });
     }
     // thicker growth hugging the building foundations
@@ -585,6 +724,9 @@ function Ferns() {
   const spots: [number, number, number][] = [
     [-12.2, -14.2, 1.1], [-14.6, -13.6, 0.8], [12.2, -15.2, 1.0], [20.4, -12.2, 0.9],
     [-20.2, -11.6, 1.2], [-2.6, -25.2, 1.3], [7.4, -23.4, 1.0],
+    // shade growth creeping toward the camp and along the sidewalks
+    [-4.6, -6.2, 0.7], [5.2, -5.6, 0.8], [-7.8, -12.8, 0.9], [10.4, -12.9, 0.85],
+    [-16.8, -6.4, 0.75], [15.2, -6.2, 0.7], [2.4, -8.4, 0.6],
   ];
   return (
     <group>
@@ -936,6 +1078,164 @@ function RustedPickup() {
         <meshStandardMaterial color="#4c5a34" roughness={1} />
       </mesh>
       <Blob x={0} z={0} r={1.25} sx={1.8} o={0.42} />
+    </group>
+  );
+}
+
+/** Moss colonizing the shaded concrete — sidewalks, curbs, foundations. */
+function MossPatches() {
+  const COUNT = LOW_POWER ? 30 : 52;
+  const ref = useRef<InstancedMesh>(null);
+  const patches = useMemo(() => {
+    const r = seeded(41);
+    const arr: { x: number; z: number; s: number; tone: number }[] = [];
+    for (let i = 0; i < COUNT; i++) {
+      const lane = r();
+      // cluster along the sidewalks, road edge and building foundations
+      const z = lane < 0.35 ? -5.1 + (r() - 0.5) * 1.4 : lane < 0.7 ? -12.9 + (r() - 0.5) * 1.4 : -9 + (r() - 0.5) * 5;
+      arr.push({ x: (r() - 0.5) * 46, z, s: 0.18 + r() * 0.6, tone: 0.7 + r() * 0.5 });
+    }
+    return arr;
+  }, [COUNT]);
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    patches.forEach((p, i) => {
+      dummy.position.set(p.x, 0.045, p.z);
+      dummy.rotation.set(-Math.PI / 2, 0, p.x * 7);
+      dummy.scale.set(p.s * (1 + (i % 3) * 0.3), p.s, 1);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      mesh.setColorAt(i, tmpColor.set('#42502c').multiplyScalar(p.tone));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }, [patches]);
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, COUNT]} frustumCulled={false}>
+      <circleGeometry args={[1, 9]} />
+      <meshStandardMaterial roughness={1} />
+    </instancedMesh>
+  );
+}
+
+/**
+ * The hero wreck — a sedan that died here decades ago and never left.
+ * Rust-eaten, windows long gone, tires perished flat, half-swallowed by moss
+ * and the grass growing up through the floor pan.
+ */
+function AbandonedSedan() {
+  const grass = useMemo(() => grassCard(31, 'lush'), []);
+  const ivy = useMemo(() => leafCluster(52, 'ivy'), []);
+  const vines = useMemo(
+    () => [
+      new CatmullRomCurve3([
+        new Vector3(-1.1, 0.05, 0.4), new Vector3(-0.9, 0.6, 0.45), new Vector3(-0.4, 0.95, 0.2),
+        new Vector3(0.2, 1.0, -0.1), new Vector3(0.8, 0.7, -0.35),
+      ]),
+      new CatmullRomCurve3([
+        new Vector3(1.3, 0.05, -0.3), new Vector3(1.1, 0.5, 0.1), new Vector3(0.6, 0.85, 0.35),
+        new Vector3(0.1, 0.95, 0.42),
+      ]),
+    ],
+    [],
+  );
+  const RUST = { color: '#6e4526', roughness: 0.95, metalness: 0.2 };
+  const RUST_DARK = { color: '#59371e', roughness: 0.95, metalness: 0.2 };
+
+  return (
+    <group position={[-11.5, 0, -7.4]} rotation={[0, -0.5, 0.02]}>
+      {/* body shell, sagging on dead suspension */}
+      <mesh position={[0, 0.36, 0]}>
+        <boxGeometry args={[2.6, 0.4, 1.05]} />
+        <meshStandardMaterial {...RUST} />
+      </mesh>
+      {/* hood + trunk lines */}
+      <mesh position={[1.0, 0.57, 0]} rotation={[0, 0, -0.04]}>
+        <boxGeometry args={[0.72, 0.05, 1.0]} />
+        <meshStandardMaterial {...RUST_DARK} />
+      </mesh>
+      <mesh position={[-1.0, 0.57, 0]} rotation={[0, 0, 0.05]}>
+        <boxGeometry args={[0.62, 0.05, 1.0]} />
+        <meshStandardMaterial {...RUST_DARK} />
+      </mesh>
+      {/* cabin with hollowed-out window openings */}
+      <mesh position={[0.05, 0.76, 0]}>
+        <boxGeometry args={[1.25, 0.42, 0.98]} />
+        <meshStandardMaterial {...RUST} />
+      </mesh>
+      <mesh position={[0.05, 0.78, 0]} scale={[0.92, 0.7, 1.05]}>
+        <boxGeometry args={[1.25, 0.42, 0.98]} />
+        <meshStandardMaterial color="#0f0d0a" roughness={1} />
+      </mesh>
+      {/* jagged glass remnants in the windshield frame */}
+      {[-0.28, 0.12, 0.4].map((z, i) => (
+        <mesh key={i} position={[0.68, 0.72 + (i % 2) * 0.08, z]} rotation={[0, 0.15, 0.7 + i * 0.5]}>
+          <planeGeometry args={[0.1, 0.05 + (i % 2) * 0.05]} />
+          <meshStandardMaterial color="#8a9490" roughness={0.25} metalness={0.5} transparent opacity={0.65} side={DoubleSide} />
+        </mesh>
+      ))}
+      {/* rust-through streaks and blisters */}
+      <mesh position={[0.3, 0.36, 0.528]}>
+        <planeGeometry args={[0.9, 0.3]} />
+        <meshStandardMaterial color="#7c4415" roughness={1} />
+      </mesh>
+      <mesh position={[-0.7, 0.32, 0.528]}>
+        <planeGeometry args={[0.5, 0.22]} />
+        <meshStandardMaterial color="#4a2c12" roughness={1} />
+      </mesh>
+      <mesh position={[-0.2, 0.34, -0.528]} rotation={[0, Math.PI, 0]}>
+        <planeGeometry args={[1.1, 0.26]} />
+        <meshStandardMaterial color="#7c4415" roughness={1} />
+      </mesh>
+      {/* missing front grille — dark cavity */}
+      <mesh position={[1.31, 0.34, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[0.8, 0.24]} />
+        <meshStandardMaterial color="#100d09" roughness={1} />
+      </mesh>
+      {/* flat perished tires, sunk into the dirt */}
+      {[[0.92, 0.56], [-0.92, 0.56], [0.92, -0.56], [-0.92, -0.56]].map(([x, z], i) => (
+        <mesh key={i} position={[x, 0.13, z]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.5]}>
+          <torusGeometry args={[0.19, 0.085, 6, 14]} />
+          <meshStandardMaterial color="#1a1815" roughness={1} />
+        </mesh>
+      ))}
+      {/* moss blankets on the roof, hood and trunk */}
+      <mesh position={[0.05, 0.99, 0.1]} rotation={[0.06, 0.3, 0]}>
+        <boxGeometry args={[1.0, 0.07, 0.7]} />
+        <meshStandardMaterial color="#48562f" roughness={1} />
+      </mesh>
+      <mesh position={[1.05, 0.62, -0.2]} rotation={[0.1, 0.6, 0]}>
+        <boxGeometry args={[0.5, 0.06, 0.5]} />
+        <meshStandardMaterial color="#42502e" roughness={1} />
+      </mesh>
+      <mesh position={[-1.05, 0.62, 0.25]} rotation={[0.08, -0.4, 0]}>
+        <boxGeometry args={[0.45, 0.05, 0.4]} />
+        <meshStandardMaterial color="#4c5a34" roughness={1} />
+      </mesh>
+      {/* vines strangling the shell */}
+      {vines.map((c, i) => (
+        <mesh key={i}>
+          <tubeGeometry args={[c, 20, 0.022, 5]} />
+          <meshStandardMaterial color="#3c4a28" roughness={1} />
+        </mesh>
+      ))}
+      <mesh position={[0.6, 0.6, 0.5]} rotation={[0.2, 0.3, 0.4]}>
+        <planeGeometry args={[0.7, 0.6]} />
+        <meshStandardMaterial map={ivy} transparent alphaTest={0.32} side={DoubleSide} roughness={1} />
+      </mesh>
+      {/* grass forcing up around and under the floor pan */}
+      {[[-1.1, 0.35, 0.5], [-0.3, -0.4, 0.45], [0.5, 0.42, 0.5], [1.2, -0.3, 0.4], [0.1, 0.1, 0.55]].map(([x, z, s], i) => (
+        <group key={i} position={[x, 0, z]}>
+          {[0, 1].map((k) => (
+            <mesh key={k} position={[0, s * 0.4, 0]} rotation={[0, (k * Math.PI) / 2 + i, 0]}>
+              <planeGeometry args={[s * 1.3, s as number]} />
+              <meshStandardMaterial map={grass} transparent alphaTest={0.4} side={DoubleSide} roughness={1} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      <Blob x={0} z={0} r={1.5} sx={1.9} o={0.42} />
     </group>
   );
 }
@@ -1384,8 +1684,10 @@ export default function Room() {
       <NearBuildings />
       <UtilityLines />
       <StreetClutter />
+      <MossPatches />
       <RoadDebris />
       <RustedPickup />
+      <AbandonedSedan />
       <MilitaryTruck />
       <Checkpoint />
       <Trees />
