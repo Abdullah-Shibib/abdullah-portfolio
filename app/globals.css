@@ -31,7 +31,6 @@ body {
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
-    scroll-behavior: smooth;
     scrollbar-width: none;
     touch-action: pan-x;
     -webkit-overflow-scrolling: touch;
@@ -42,8 +41,12 @@ body {
   }
 
   .scene-stage {
-    width: max(220vw, 820px);
+    width: clamp(1660px, 430vw, 1840px);
     height: 100dvh;
+  }
+
+  .scene-stage canvas {
+    touch-action: pan-x;
   }
 }
 

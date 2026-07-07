@@ -358,13 +358,20 @@ export default function MonitorWall() {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
   const lights = useRef<(any | null)[]>([]);
+  const hoveredIdRef = useRef<MonitorId | null>(null);
   const pendingTap = useRef<{ id: MonitorId; x: number; y: number; pointerId: number } | null>(null);
 
   useEffect(() => {
     const canvas = gl.domElement;
 
+    const applyHover = (id: MonitorId | null) => {
+      if (hoveredIdRef.current === id) return;
+      hoveredIdRef.current = id;
+      setHoveredId(id);
+    };
+
     const clearHover = () => {
-      setHoveredId(null);
+      applyHover(null);
       setHint(null);
       document.body.style.cursor = 'auto';
     };
@@ -372,7 +379,9 @@ export default function MonitorWall() {
     const resolvePointer = (event: MouseEvent) =>
       resolveScreenMonitorAt(event.clientX, event.clientY, camera, canvas);
 
-    const handleMove = (event: MouseEvent) => {
+    const handleMove = (event: MouseEvent | PointerEvent) => {
+      if ('pointerType' in event && event.pointerType === 'touch') return;
+
       const state = useCommandCenter.getState();
       if (state.focused || state.panelOpen) {
         clearHover();
@@ -380,7 +389,7 @@ export default function MonitorWall() {
       }
 
       const id = resolvePointer(event);
-      setHoveredId(id);
+      applyHover(id);
       if (!id) {
         setHint(null);
         document.body.style.cursor = 'auto';

@@ -80,12 +80,32 @@ function usePanelZoom() {
   return zoom;
 }
 
+function useIsMobilePanel() {
+  const compute = () =>
+    typeof window !== 'undefined' &&
+    (window.innerWidth < 700 || window.matchMedia?.('(pointer: coarse)').matches);
+  const [mobile, setMobile] = useState(compute);
+
+  useEffect(() => {
+    const onResize = () => setMobile(compute());
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, []);
+
+  return mobile;
+}
+
 function FocusPanel() {
   const focused = useCommandCenter((s) => s.focused);
   const panelOpen = useCommandCenter((s) => s.panelOpen);
   const focus = useCommandCenter((s) => s.focus);
   const scrollRef = useRef<HTMLDivElement>(null);
   const zoom = usePanelZoom();
+  const mobilePanel = useIsMobilePanel();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -122,16 +142,20 @@ function FocusPanel() {
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-10"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.25 } }}
+          exit={{ opacity: 0, transition: { duration: mobilePanel ? 0.14 : 0.25 } }}
         >
           {/* dimmer — heavier for reading contrast */}
           <div className="absolute inset-0 bg-black/70 md:backdrop-blur-md" onClick={() => focus(null)} />
 
           <motion.div
             className="relative flex h-full max-h-[860px] w-full max-w-6xl flex-col"
-            initial={{ scale: 0.9, y: 24 }}
-            animate={{ scale: 1, y: 0, transition: { type: 'spring', stiffness: 150, damping: 20 } }}
-            exit={{ scale: 0.94, y: 12 }}
+            initial={{ scale: mobilePanel ? 0.98 : 0.9, y: mobilePanel ? 8 : 24 }}
+            animate={{
+              scale: 1,
+              y: 0,
+              transition: { type: 'spring', stiffness: mobilePanel ? 220 : 150, damping: mobilePanel ? 28 : 20 },
+            }}
+            exit={{ scale: mobilePanel ? 0.98 : 0.94, y: mobilePanel ? 6 : 12 }}
           >
             <div className="mb-2 flex items-end justify-between gap-2 px-1 md:mb-4">
               <div className="min-w-0">
@@ -153,29 +177,31 @@ function FocusPanel() {
 
             <div ref={scrollRef} className="panel-scroll relative min-h-0 flex-1 overflow-y-auto scroll-smooth rounded-xl bg-[#0d0f0a] shadow-neon ring-1 ring-teal-200/20">
               {/* CRT power-on: line burst + flicker, then the UI fades in */}
-              <motion.div
-                className="pointer-events-none absolute inset-0 z-10 grid place-items-center overflow-hidden rounded-xl bg-black"
-                initial={{ opacity: 1 }}
-                animate={{ opacity: 0, transitionEnd: { display: 'none' } }}
-                transition={{ delay: 0.5, duration: 0.12 }}
-              >
+              {!mobilePanel && (
                 <motion.div
-                  className="h-[2px] w-full bg-teal-100"
-                  style={{ boxShadow: '0 0 24px 4px rgba(212, 218, 180, 0.9)' }}
-                  initial={{ scaleX: 0.02, scaleY: 1, opacity: 0 }}
-                  animate={{
-                    scaleX: [0.02, 1, 1, 1],
-                    scaleY: [1, 1, 70, 150],
-                    opacity: [0, 1, 0.55, 0],
-                  }}
-                  transition={{ duration: 0.5, times: [0, 0.35, 0.75, 1] }}
-                />
-              </motion.div>
+                  className="pointer-events-none absolute inset-0 z-10 grid place-items-center overflow-hidden rounded-xl bg-black"
+                  initial={{ opacity: 1 }}
+                  animate={{ opacity: 0, transitionEnd: { display: 'none' } }}
+                  transition={{ delay: 0.5, duration: 0.12 }}
+                >
+                  <motion.div
+                    className="h-[2px] w-full bg-teal-100"
+                    style={{ boxShadow: '0 0 24px 4px rgba(212, 218, 180, 0.9)' }}
+                    initial={{ scaleX: 0.02, scaleY: 1, opacity: 0 }}
+                    animate={{
+                      scaleX: [0.02, 1, 1, 1],
+                      scaleY: [1, 1, 70, 150],
+                      opacity: [0, 1, 0.55, 0],
+                    }}
+                    transition={{ duration: 0.5, times: [0, 0.35, 0.75, 1] }}
+                  />
+                </motion.div>
+              )}
 
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 0.42, duration: 0.3 }}
+                transition={{ delay: mobilePanel ? 0.04 : 0.42, duration: mobilePanel ? 0.14 : 0.3 }}
               >
                 {/* zoom scales every screen's type & UI up for comfortable
                     reading — on a plain div so framer-motion never touches it */}

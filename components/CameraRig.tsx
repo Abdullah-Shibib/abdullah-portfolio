@@ -62,7 +62,7 @@ export default function CameraRig() {
       x: room.position.x,
       y: room.position.y,
       z: room.position.z,
-      duration: mobile ? 1.4 : 2.6,
+      duration: mobile ? 0.9 : 2.6,
       ease: 'sine.inOut',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -76,13 +76,14 @@ export default function CameraRig() {
 
     setTransitioning(true);
     const instant = window.location.search.includes('fast'); // dev flag: skip cinematics
-    const duration = instant ? 0.05 : mobile ? 0.85 : 1.15;
+    if (focused && mobile) setPanelOpen(true);
+    const duration = instant ? 0.05 : mobile ? (focused ? 0.34 : 0.5) : 1.15;
     gsap.killTweensOf([base.pos, base.target, base]);
     const tl = gsap.timeline({
       defaults: { duration, ease: 'sine.inOut', overwrite: true },
       onComplete: () => {
         setTransitioning(false);
-        if (focused) setPanelOpen(true);
+        if (focused && !mobile) setPanelOpen(true);
       },
     });
     tl.to(base.pos, { x: dest.position.x, y: dest.position.y, z: dest.position.z }, 0);

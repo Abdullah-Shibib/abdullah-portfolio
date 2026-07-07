@@ -39,7 +39,7 @@ export default function Experience() {
   // phones: lower pixel budget, same scene — the effects hide the difference
   const dpr = useMemo<[number, number]>(() => {
     const max = typeof window === 'undefined' ? 2 : window.devicePixelRatio;
-    return [1, Math.min(max, IS_TOUCH ? 1.5 : 2)];
+    return IS_TOUCH ? [1, 1] : [1, Math.min(max, 2)];
   }, []);
 
   return (
