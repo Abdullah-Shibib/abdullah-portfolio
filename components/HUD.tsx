@@ -125,7 +125,7 @@ function FocusPanel() {
           exit={{ opacity: 0, transition: { duration: 0.25 } }}
         >
           {/* dimmer — heavier for reading contrast */}
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => focus(null)} />
+          <div className="absolute inset-0 bg-black/70 md:backdrop-blur-md" onClick={() => focus(null)} />
 
           <motion.div
             className="relative flex h-full max-h-[860px] w-full max-w-6xl flex-col"

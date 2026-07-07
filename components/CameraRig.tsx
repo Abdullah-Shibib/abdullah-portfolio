@@ -10,7 +10,7 @@ import { useCommandCenter } from '@/lib/store';
 /** Room view compensation for narrow (portrait) viewports: pull back so the
  *  whole monitor wall still fits in frame. */
 function roomCamera(aspect: number) {
-  const widen = Math.min(2.1, Math.max(1, 1.35 / Math.max(aspect, 0.4)));
+  const widen = Math.min(1.85, Math.max(1, 1.12 / Math.max(aspect, 0.55)));
   return {
     position: new Vector3(
       DEFAULT_CAMERA.position.x,
@@ -32,6 +32,8 @@ export default function CameraRig() {
   const booted = useCommandCenter((s) => s.booted);
   const { setTransitioning, setPanelOpen } = useCommandCenter.getState();
   const aspect = size.width / Math.max(1, size.height);
+  const mobile = typeof window !== 'undefined' &&
+    (window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth < 700);
 
   // GSAP animates these; useFrame composes them with breathing + parallax.
   const base = useMemo(
@@ -55,15 +57,16 @@ export default function CameraRig() {
       base.pos.copy(room.position);
       return;
     }
+    gsap.killTweensOf(base.pos);
     gsap.to(base.pos, {
       x: room.position.x,
       y: room.position.y,
       z: room.position.z,
-      duration: 3.2,
-      ease: 'power2.inOut',
+      duration: mobile ? 1.4 : 2.6,
+      ease: 'sine.inOut',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [booted, base]);
+  }, [booted, base, mobile]);
 
   /* Fly to the focused monitor / back to the room.
      Re-runs on viewport aspect change so orientation flips reframe cleanly. */
@@ -73,8 +76,10 @@ export default function CameraRig() {
 
     setTransitioning(true);
     const instant = window.location.search.includes('fast'); // dev flag: skip cinematics
+    const duration = instant ? 0.05 : mobile ? 0.85 : 1.15;
+    gsap.killTweensOf([base.pos, base.target, base]);
     const tl = gsap.timeline({
-      defaults: { duration: instant ? 0.05 : 1.35, ease: 'power3.inOut' },
+      defaults: { duration, ease: 'sine.inOut', overwrite: true },
       onComplete: () => {
         setTransitioning(false);
         if (focused) setPanelOpen(true);
@@ -86,7 +91,7 @@ export default function CameraRig() {
     return () => {
       tl.kill();
     };
-  }, [focused, base, aspect, booted, setTransitioning, setPanelOpen]);
+  }, [focused, base, aspect, booted, mobile, setTransitioning, setPanelOpen]);
 
   /* Mouse parallax source — skipped for touch pointers so phones don't
      lurch on every tap. */

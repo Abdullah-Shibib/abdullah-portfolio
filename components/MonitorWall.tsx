@@ -358,6 +358,7 @@ export default function MonitorWall() {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
   const lights = useRef<(any | null)[]>([]);
+  const pendingTap = useRef<{ id: MonitorId; x: number; y: number; pointerId: number } | null>(null);
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -391,29 +392,57 @@ export default function MonitorWall() {
       document.body.style.cursor = 'pointer';
     };
 
+    const interactiveTarget = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      return target?.closest('a,button,input,textarea,select,[role="button"]');
+    };
+
     const handleDown = (event: PointerEvent) => {
       const state = useCommandCenter.getState();
-      const target = event.target instanceof Element ? event.target : null;
-      if (state.panelOpen || target?.closest('a,button,input,textarea,select,[role="button"]')) return;
+      if (state.focused || state.panelOpen || interactiveTarget(event)) {
+        pendingTap.current = null;
+        return;
+      }
 
       const id = resolvePointer(event);
-      if (!id) return;
+      pendingTap.current = id ? { id, x: event.clientX, y: event.clientY, pointerId: event.pointerId } : null;
+    };
+
+    const handleUp = (event: PointerEvent) => {
+      const tap = pendingTap.current;
+      pendingTap.current = null;
+      if (!tap || tap.pointerId !== event.pointerId || interactiveTarget(event)) return;
+
+      const moved = Math.hypot(event.clientX - tap.x, event.clientY - tap.y);
+      if (moved > 12) return;
+
+      const id = resolvePointer(event);
+      if (!id || id !== tap.id) return;
 
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
 
+      const state = useCommandCenter.getState();
       state.focus(state.focused === id ? null : id);
+    };
+
+    const handleCancel = () => {
+      pendingTap.current = null;
     };
 
     window.addEventListener('pointermove', handleMove, { capture: true });
     window.addEventListener('mousemove', handleMove, { capture: true });
     window.addEventListener('pointerdown', handleDown, { capture: true });
+    window.addEventListener('pointerup', handleUp, { capture: true });
+    window.addEventListener('pointercancel', handleCancel, { capture: true });
     window.addEventListener('blur', clearHover);
     return () => {
       window.removeEventListener('pointermove', handleMove, { capture: true });
       window.removeEventListener('mousemove', handleMove, { capture: true });
       window.removeEventListener('pointerdown', handleDown, { capture: true });
+      window.removeEventListener('pointerup', handleUp, { capture: true });
+      window.removeEventListener('pointercancel', handleCancel, { capture: true });
       window.removeEventListener('blur', clearHover);
       clearHover();
     };

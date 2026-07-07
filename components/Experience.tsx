@@ -14,7 +14,7 @@ import { useCommandCenter } from '@/lib/store';
 /** Coarse-pointer (phone/tablet) detection — client-only bundle, safe to read. */
 export const IS_TOUCH =
   typeof window !== 'undefined' &&
-  (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 1);
+  (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 1 || window.innerWidth < 700);
 
 /** DOF that eases deeper while a monitor is focused, softening the room. */
 function FocusDOF() {
@@ -44,7 +44,7 @@ export default function Experience() {
 
   return (
     <Canvas
-      className="!fixed inset-0"
+      className="!absolute inset-0 h-full w-full"
       dpr={dpr}
       gl={{ antialias: false, powerPreference: 'high-performance' }}
       camera={{ position: [0, 2.25, 7.4], fov: 45, near: 0.1, far: 160 }}
@@ -74,11 +74,13 @@ export default function Experience() {
 
       <CameraRig />
 
-      <EffectComposer multisampling={0}>
-        <FocusDOF />
-        <Bloom intensity={0.22} luminanceThreshold={0.85} luminanceSmoothing={0.75} mipmapBlur />
-        <Vignette eskil={false} offset={0.2} darkness={0.62} />
-      </EffectComposer>
+      {!IS_TOUCH && (
+        <EffectComposer multisampling={0}>
+          <FocusDOF />
+          <Bloom intensity={0.22} luminanceThreshold={0.85} luminanceSmoothing={0.75} mipmapBlur />
+          <Vignette eskil={false} offset={0.2} darkness={0.62} />
+        </EffectComposer>
+      )}
     </Canvas>
   );
 }
