@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useRef } from 'react';
 import HUD from '@/components/HUD';
+import { useViewport, watchViewport } from '@/lib/viewport';
 
 /* The whole Three.js bundle is code-split out of the first paint. */
 const Experience = dynamic(() => import('@/components/Experience'), {
@@ -25,26 +26,43 @@ const Experience = dynamic(() => import('@/components/Experience'), {
 export default function Page() {
   const scrollerRef = useRef<HTMLDivElement>(null);
 
+  /* Keep the pan-x world centered in portrait; pin it home in landscape.
+     Driven by the settled viewport store, so it runs once per rotation
+     with the browser's FINAL dimensions — not the mid-rotation ones. */
   useEffect(() => {
+    watchViewport();
     const scroller = scrollerRef.current;
     if (!scroller) return;
 
-    const centerPortraitView = () => {
-      const portrait = window.innerHeight > window.innerWidth;
-      const mobileWidthOrTouch = window.innerWidth < 700 || window.matchMedia?.('(pointer: coarse)').matches;
-      const portraitTouch = portrait && mobileWidthOrTouch;
-      if (!portraitTouch) {
+    const center = () => {
+      const { portrait, mobile } = useViewport.getState();
+      if (portrait && mobile) {
+        scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
+      } else {
         scroller.scrollLeft = 0;
-        return;
       }
-      scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
     };
 
-    const id = window.setTimeout(centerPortraitView, 80);
-    window.addEventListener('orientationchange', centerPortraitView);
+    const id = window.setTimeout(center, 80);
+    const unsub = useViewport.subscribe((s, prev) => {
+      if (s.generation !== prev.generation || s.width !== prev.width) center();
+    });
     return () => {
       window.clearTimeout(id);
-      window.removeEventListener('orientationchange', centerPortraitView);
+      unsub();
+    };
+  }, []);
+
+  /* Kill browser gestures that fight the experience: iOS pinch zoom
+     (gesturestart is Safari-only and ignores user-scalable=no) and
+     rubber-band overscroll while panning the world. */
+  useEffect(() => {
+    const prevent = (e: Event) => e.preventDefault();
+    document.addEventListener('gesturestart', prevent);
+    document.addEventListener('gesturechange', prevent);
+    return () => {
+      document.removeEventListener('gesturestart', prevent);
+      document.removeEventListener('gesturechange', prevent);
     };
   }, []);
 

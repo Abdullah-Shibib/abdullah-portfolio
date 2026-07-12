@@ -11,7 +11,8 @@ export type MonitorId =
   | 'projects'
   | 'timeline'
   | 'skills'
-  | 'contact';
+  | 'contact'
+  | 'assistant';
 
 export interface MonitorDef {
   id: MonitorId;
@@ -98,6 +99,16 @@ export const MONITORS: MonitorDef[] = [
     yaw: -0.48,
     size: [1.7, 1.0],
     viewDistance: 2.1,
+  },
+  {
+    id: 'assistant',
+    label: 'AI Assistant',
+    title: 'AXIS INTELLIGENCE',
+    subtitle: "The command center's surviving AI — ask it anything",
+    position: [-6.42, 2.42, -3.26],
+    yaw: 0.72,
+    size: [1.6, 1.05],
+    viewDistance: 2.15,
   },
 ];
 

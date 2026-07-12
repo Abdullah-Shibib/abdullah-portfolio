@@ -1,16 +1,33 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import { CatmullRomCurve3, Group, InstancedMesh, MathUtils, Object3D, Vector3 } from 'three';
+import { AdditiveBlending, CatmullRomCurve3, Color, Group, InstancedMesh, MathUtils, Object3D, Vector3 } from 'three';
 import { useFrame } from '@react-three/fiber';
 import { seeded } from '@/lib/data';
+import { WORLD } from '@/lib/world';
 import { WIRE_SAGS } from './Room';
 
 const dummy = new Object3D();
+const tmpColor = new Color();
+const scratchV = new Vector3();
 
 /* Shared predator/prey blackboard — rabbits read the fox, the fox reads them. */
 export const FOX_POS = new Vector3(999, 0, 999);
 const RABBIT_POSITIONS: (Vector3 | undefined)[] = [];
+
+/** The puddles from Room's terrain — deer drink here. */
+const PUDDLES: [number, number][] = [[3.5, -8.2], [-9.5, -9.6]];
+
+/** Herd blackboard — now and then the whole herd gathers at a puddle,
+ *  drinks, then drifts off together. The lead deer runs the clock. */
+const HERD = {
+  gatherUntil: 0,
+  nextGather: 70,
+  spot: new Vector3(-9.5, 0, -9.6),
+};
+
+/** The fox den — tucked under the big bush on the far left flank. */
+const DEN = new Vector3(-23.6, 0, -13.5);
 
 const angleLerp = (a: number, b: number, k: number) => {
   let d = (b - a) % (Math.PI * 2);
@@ -23,31 +40,136 @@ const angleLerp = (a: number, b: number, k: number) => {
 /*  Deer — a small herd grazing by the old road.                       */
 /* ------------------------------------------------------------------ */
 
-function Deer({ position, facing, phase, buck = false }: { position: [number, number, number]; facing: number; phase: number; buck?: boolean }) {
+type DeerMode = 'graze' | 'scan' | 'walk' | 'toWater' | 'drink' | 'retreat' | 'rest';
+
+function Deer({ position, facing, phase, buck = false, lead = false }: { position: [number, number, number]; facing: number; phase: number; buck?: boolean; lead?: boolean }) {
   const head = useRef<Group>(null);
   const body = useRef<Group>(null);
   const root = useRef<Group>(null);
   const tail = useRef<Group>(null);
+  const st = useRef({
+    pos: new Vector3(position[0], 0, position[2]),
+    heading: facing,
+    mode: 'graze' as DeerMode,
+    until: phase % 3,
+    decision: Math.floor(phase * 13),
+    target: new Vector3(position[0], 0, position[2]),
+    restK: 0, // 0 standing … 1 bedded down
+  });
 
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime + phase;
-    // slow wander around the home patch — two incommensurate periods so the
-    // loop never visibly repeats
-    if (root.current) {
-      root.current.position.x = position[0] + Math.sin(t * 0.047) * 1.3 + Math.sin(t * 0.113) * 0.4;
-      root.current.position.z = position[2] + Math.cos(t * 0.037) * 1.0 + Math.sin(t * 0.089) * 0.3;
-      root.current.rotation.y = facing + Math.sin(t * 0.05) * 0.5 + Math.sin(t * 0.021) * 0.3;
+  useFrame(({ clock }, dt) => {
+    const g = root.current;
+    if (!g) return;
+    const s = st.current;
+    const t = clock.elapsedTime;
+    const step = Math.min(dt, 0.1);
+    const night = WORLD.night;
+
+    // the lead deer runs the herd clock: gather at the puddle, then move off
+    if (lead && t > HERD.nextGather && night < 0.5) {
+      HERD.spot.set(PUDDLES[1][0], 0, PUDDLES[1][1]);
+      HERD.gatherUntil = t + 26;
+      HERD.nextGather = t + 160 + Math.random() * 220;
     }
-    // long graze (head down) with occasional alert look-up
-    const cycle = (t * 0.08) % 1;
-    const up = cycle > 0.72 && cycle < 0.86;
+    const gathering = t < HERD.gatherUntil;
+    if (gathering && s.mode !== 'toWater' && s.mode !== 'drink') {
+      s.mode = 'toWater';
+      // fan out around the water's edge instead of stacking on one point
+      s.target.set(HERD.spot.x + Math.cos(phase * 2.1) * 1.35, 0, HERD.spot.z + Math.sin(phase * 2.1) * 1.1);
+      s.until = t + 20;
+    }
+
+    /* -- decide -- */
+    if (t > s.until && s.mode !== 'toWater' && s.mode !== 'drink') {
+      s.decision++;
+      const r = seeded(1009 + Math.floor(phase * 100) * 31 + s.decision * 17);
+      const roll = r();
+      if (night > 0.7) {
+        // bedded down after dark, with the occasional watchful look around
+        if (roll < 0.75) {
+          s.mode = 'rest';
+          s.until = t + 14 + r() * 22;
+        } else {
+          s.mode = 'scan';
+          s.until = t + 2 + r() * 2;
+        }
+      } else if (roll < 0.42) {
+        s.mode = 'graze';
+        s.until = t + 4 + r() * 6;
+      } else if (roll < 0.62) {
+        s.mode = 'scan'; // pause, listen, look around
+        s.until = t + 1.8 + r() * 2.6;
+      } else if (roll < 0.87) {
+        s.mode = 'walk';
+        s.target.set(position[0] + (r() - 0.5) * 6.5, 0, position[2] + (r() - 0.5) * 4.5);
+        s.until = t + 10;
+      } else if (roll < 0.94) {
+        // wander to the nearest puddle for a solo drink
+        const p = Math.hypot(PUDDLES[0][0] - s.pos.x, PUDDLES[0][1] - s.pos.z) <
+          Math.hypot(PUDDLES[1][0] - s.pos.x, PUDDLES[1][1] - s.pos.z) ? PUDDLES[0] : PUDDLES[1];
+        s.mode = 'toWater';
+        s.target.set(p[0] + (r() - 0.5) * 1.4, 0, p[1] + (r() - 0.5) * 1.0);
+        s.until = t + 18;
+      } else {
+        // melt deeper into the vegetation for a while
+        s.mode = 'retreat';
+        s.target.set(position[0] + (r() - 0.5) * 3, 0, Math.min(-12.5, position[2] - 3 - r() * 2.5));
+        s.until = t + 14;
+      }
+    }
+
+    /* -- act -- */
+    let speed = 0;
+    let headTarget = -0.1;
+    if (s.mode === 'graze') {
+      speed = 0.05; // nose-down drift through the grass
+      s.heading += Math.sin(t * 0.11 + phase) * step * 0.25;
+      headTarget = -0.72 + Math.sin(t * 1.7 + phase) * 0.06;
+    } else if (s.mode === 'scan') {
+      headTarget = 0.35;
+    } else if (s.mode === 'rest') {
+      headTarget = 0.05 + Math.sin(t * 0.4 + phase) * 0.08;
+    } else if (s.mode === 'drink') {
+      headTarget = -0.95;
+      if (t > s.until) {
+        s.mode = gathering ? 'scan' : 'walk';
+        if (!gathering) s.target.set(position[0] + Math.sin(phase) * 2, 0, position[2] + Math.cos(phase) * 2);
+        s.until = t + (gathering ? 2 : 8);
+      }
+    } else {
+      // walk / toWater / retreat — steer toward the target
+      const want = Math.atan2(s.target.x - s.pos.x, s.target.z - s.pos.z);
+      s.heading = angleLerp(s.heading, want, Math.min(1, step * 1.6));
+      speed = s.mode === 'toWater' ? 0.62 : 0.45;
+      headTarget = -0.05;
+      if (s.pos.distanceTo(s.target) < 0.35 || t > s.until) {
+        if (s.mode === 'toWater') {
+          s.mode = 'drink';
+          s.until = t + 5 + (phase % 1) * 4;
+        } else {
+          s.mode = 'graze';
+          s.until = t + 3 + (phase % 1) * 4;
+        }
+      }
+    }
+
+    s.pos.x += Math.sin(s.heading) * speed * step;
+    s.pos.z += Math.cos(s.heading) * speed * step;
+
+    // bed down / stand up smoothly
+    s.restK += ((s.mode === 'rest' ? 1 : 0) - s.restK) * Math.min(1, step * 1.2);
+
+    const bob = speed > 0.2 ? Math.abs(Math.sin(t * 6.5 + phase)) * 0.02 : 0;
+    g.position.set(s.pos.x, bob - s.restK * 0.3, s.pos.z);
+    g.rotation.y = s.heading;
+
     if (head.current) {
-      const target = up ? 0.35 : -0.72 + Math.sin(t * 1.7) * 0.06;
-      head.current.rotation.z += (target - head.current.rotation.z) * 0.04;
-      head.current.rotation.y = up ? Math.sin(t * 0.5) * 0.3 : 0;
+      head.current.rotation.z += (headTarget - head.current.rotation.z) * Math.min(1, step * 3.5);
+      const lookAround = s.mode === 'scan' || s.mode === 'rest' ? Math.sin(t * 0.5 + phase) * 0.4 : 0;
+      head.current.rotation.y += (lookAround - head.current.rotation.y) * Math.min(1, step * 2.5);
     }
-    if (body.current) body.current.position.y = 0.62 + Math.sin(t * 1.1) * 0.006; // breath
-    if (tail.current) tail.current.rotation.x = (t * 0.31) % 1 < 0.08 ? Math.sin(t * 30) * 0.5 : 0; // flick
+    if (body.current) body.current.position.y = 0.62 + Math.sin(t * 1.1 + phase) * 0.006; // breath
+    if (tail.current) tail.current.rotation.x = (t * 0.31 + phase) % 1 < 0.08 ? Math.sin(t * 30) * 0.5 : 0; // flick
   });
 
   const hide = '#7a5c3d';
@@ -254,7 +376,7 @@ function Rabbit({ home, radius, phase, idx }: { home: [number, number, number]; 
 /*  Fox — patrols, sniffs, chases rabbits, melts into the brush.       */
 /* ------------------------------------------------------------------ */
 
-type FoxMode = 'patrol' | 'sniff' | 'chase' | 'hide';
+type FoxMode = 'patrol' | 'sniff' | 'chase' | 'hide' | 'toDen' | 'denRest';
 
 /** Bushes it can vanish into (mirrors Room's bush spots). */
 const FOX_COVER: [number, number][] = [[-9.4, -7.4], [11.2, -6.6], [2.2, -13.6], [17.8, -9.8]];
@@ -298,10 +420,10 @@ function Fox() {
     let wantSpeed = 0.55;
     let target: Vector3 | null = null;
 
-    // spot prey — only while working the route
+    // spot prey — only while working the route; hunts harder in the dark
     if (s.mode === 'patrol' && t > s.until) {
       let best = -1;
-      let bestD = 4.2;
+      let bestD = 4.2 + WORLD.night * 2.2;
       RABBIT_POSITIONS.forEach((p, i) => {
         if (!p) return;
         const d = s.pos.distanceTo(p);
@@ -329,6 +451,7 @@ function Fox() {
       }
     } else if (s.mode === 'sniff') {
       wantSpeed = 0.06;
+      s.sink = Math.max(0, s.sink - dt * 0.9); // uncurl if it was resting
       if (head.current) head.current.rotation.x += (0.55 - head.current.rotation.x) * Math.min(1, dt * 5);
       if (t > s.until) {
         s.mode = 'patrol';
@@ -362,6 +485,23 @@ function Fox() {
           s.until = t + 6;
         }
       }
+    } else if (s.mode === 'toDen') {
+      target = DEN;
+      wantSpeed = 0.95;
+      if (s.pos.distanceTo(DEN) < 0.45) {
+        s.mode = 'denRest';
+        s.until = t + 16 + Math.random() * 24;
+      }
+    } else if (s.mode === 'denRest') {
+      // curled up at the entrance — breathing, ears up, tail wrapped
+      wantSpeed = 0;
+      s.sink = Math.min(0.45, s.sink + dt * 0.8); // settle low against the dirt
+      if (head.current) head.current.rotation.x += (0.15 - head.current.rotation.x) * Math.min(1, dt * 2);
+      if (t > s.until) {
+        // emerge: stretch, sniff the morning air, then work the route again
+        s.mode = 'sniff';
+        s.until = t + 2.2;
+      }
     } else {
       // patrol — variable pace so the lap never feels looped
       if (head.current) head.current.rotation.x += (0 - head.current.rotation.x) * Math.min(1, dt * 4);
@@ -374,7 +514,11 @@ function Fox() {
         s.decision++;
         const r = seeded(977 + s.decision * 29);
         const roll = r();
-        if (roll < 0.3) {
+        // a fox is crepuscular — bright midday sends it back to the den
+        if (WORLD.dayness > 0.85 && WORLD.golden < 0.2 && roll < 0.3) {
+          s.mode = 'toDen';
+          s.until = t + 30;
+        } else if (roll < 0.3) {
           s.mode = 'sniff';
           s.until = t + 1.6 + r() * 2;
         } else if (roll < 0.42) {
@@ -482,6 +626,8 @@ function PerchedBird({ perch, phase, flies = false }: { perch: [number, number, 
   useFrame(({ clock }) => {
     const g = ref.current;
     if (!g) return;
+    g.visible = WORLD.night < 0.6; // songbirds roost after dark
+    if (!g.visible) return;
     const t = clock.elapsedTime + phase;
     const cycle = (t * 0.02) % 1; // ~50s period
     if (flies && cycle < 0.14) {
@@ -543,7 +689,12 @@ function RoofFlock({ center, roofY, count = 5, phase = 0 }: { center: [number, n
   const pos = useRef(offsets.map((o) => new Vector3(center[0] + Math.cos(o.a) * o.r, roofY + 3, center[1] + Math.sin(o.a) * o.r)));
   const tmpV = useMemo(() => new Vector3(), []);
 
+  const flockRoot = useRef<Group>(null);
   useFrame(({ clock }, dt) => {
+    if (flockRoot.current) {
+      flockRoot.current.visible = WORLD.night < 0.55; // flocks settle in at dark
+      if (!flockRoot.current.visible) return;
+    }
     const s = st.current;
     const t = clock.elapsedTime + phase;
 
@@ -607,7 +758,7 @@ function RoofFlock({ center, roofY, count = 5, phase = 0 }: { center: [number, n
   });
 
   return (
-    <group>
+    <group ref={flockRoot}>
       {offsets.map((_, i) => (
         <group
           key={i}
@@ -660,6 +811,8 @@ function Crow({ offset, loop }: { offset: number; loop: Vector3[] }) {
   useFrame(({ clock }) => {
     const g = ref.current;
     if (!g) return;
+    g.visible = WORLD.night < 0.55; // crows head to roost at dark
+    if (!g.visible) return;
     const t = (clock.elapsedTime * 0.014 + offset) % 1;
     path.getPointAt(t, pos);
     path.getPointAt((t + 0.01) % 1, ahead);
@@ -709,7 +862,7 @@ function Flock({ y = 17, z = -24, speed = 0.016, size = 1 }: { y?: number; z?: n
     const t = clock.elapsedTime;
     const k = ((t * speed) % 1); // slow crossing
     const x = MathUtils.lerp(-45, 45, k);
-    const visible = k > 0.02 && k < 0.98;
+    const visible = k > 0.02 && k < 0.98 && WORLD.night < 0.5;
     mesh.visible = visible;
     offsets.forEach((o, i) => {
       const flap = 0.5 + Math.abs(Math.sin(t * 6 + o.p)) * 0.8;
@@ -737,6 +890,8 @@ function WireCrow({ sag, phase }: { sag: [number, number, number]; phase: number
   useFrame(({ clock }) => {
     const t = clock.elapsedTime + phase;
     if (ref.current) {
+      ref.current.visible = WORLD.night < 0.6;
+      if (!ref.current.visible) return;
       ref.current.position.set(sag[0], sag[1] + 0.02 + Math.sin(t * 2.2) * 0.004, sag[2]);
       ref.current.rotation.y = Math.sin(t * 0.3) * 0.5;
     }
@@ -775,6 +930,8 @@ function Pigeon({ base, phase }: { base: [number, number, number]; phase: number
   useFrame(({ clock }) => {
     const g = ref.current;
     if (!g) return;
+    g.visible = WORLD.night < 0.6; // pigeons roost too
+    if (!g.visible) return;
     const t = clock.elapsedTime * 0.3 + phase;
     const step = Math.floor(t) % 6;
     const p = MathUtils.smoothstep(t % 1, 0, 0.3);
@@ -805,22 +962,85 @@ function Pigeon({ base, phase }: { base: [number, number, number]; phase: number
 /*  Small fliers & the squirrel.                                       */
 /* ------------------------------------------------------------------ */
 
+type BflyMode = 'fly' | 'descend' | 'rest';
+
 function Butterfly({ center, phase, tint }: { center: [number, number, number]; phase: number; tint: string }) {
   const ref = useRef<Group>(null);
   const wingL = useRef<Group>(null);
   const wingR = useRef<Group>(null);
+  const st = useRef({
+    mode: 'fly' as BflyMode,
+    pos: new Vector3(center[0], center[1] + 0.3, center[2]),
+    target: new Vector3(center[0] + 0.5, center[1] + 0.4, center[2]),
+    until: phase % 3,
+    decision: Math.floor(phase * 11),
+  });
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, dt) => {
     const g = ref.current;
     if (!g) return;
-    const t = clock.elapsedTime * 0.5 + phase;
-    g.position.set(
-      center[0] + Math.sin(t * 0.9) * 1.4 + Math.sin(t * 2.3) * 0.3,
-      center[1] + 0.25 + Math.sin(t * 1.7) * 0.25,
-      center[2] + Math.cos(t * 0.7) * 1.1,
-    );
-    g.rotation.y = t;
-    const flap = Math.sin(clock.elapsedTime * 16 + phase) * 1.0;
+    // butterflies are strictly a daytime sight
+    const day = WORLD.dayness;
+    g.visible = day > 0.05;
+    if (!g.visible) return;
+
+    const s = st.current;
+    const t = clock.elapsedTime;
+    const step = Math.min(dt, 0.1);
+
+    // a passing fox startles a resting butterfly straight back into the air
+    if (s.mode !== 'fly' && s.pos.distanceTo(FOX_POS) < 1.7) {
+      s.mode = 'fly';
+      s.target.set(center[0], center[1] + 0.7, center[2]);
+      s.until = t + 2.5;
+    }
+
+    if (s.mode === 'fly') {
+      if (t > s.until || s.pos.distanceTo(s.target) < 0.15) {
+        s.decision++;
+        const r = seeded(4111 + Math.floor(phase * 100) * 41 + s.decision * 13);
+        if (r() < 0.28) {
+          // pick a blade of grass and drop toward it
+          s.mode = 'descend';
+          s.target.set(center[0] + (r() - 0.5) * 2.4, 0.07 + r() * 0.1, center[2] + (r() - 0.5) * 1.8);
+          s.until = t + 6;
+        } else {
+          s.target.set(center[0] + (r() - 0.5) * 3.2, center[1] + 0.15 + r() * 0.55, center[2] + (r() - 0.5) * 2.4);
+          s.until = t + 1.6 + r() * 2.6;
+        }
+      }
+    } else if (s.mode === 'descend') {
+      if (s.pos.distanceTo(s.target) < 0.05 || t > s.until) {
+        s.mode = 'rest';
+        s.until = t + 2 + (phase % 1) * 5; // sit, wings slowly fanning
+      }
+    } else if (t > s.until) {
+      s.mode = 'fly';
+      s.target.set(center[0] + Math.sin(phase + t) * 1.4, center[1] + 0.5, center[2] + Math.cos(phase + t) * 1.2);
+      s.until = t + 2 + (phase % 1) * 2;
+    }
+
+    // move — flutter hard in the air, settle gently on approach
+    const speed = s.mode === 'fly' ? 0.55 : s.mode === 'descend' ? 0.3 : 0;
+    if (speed > 0) {
+      const dir = scratchV.subVectors(s.target, s.pos);
+      const d = dir.length();
+      if (d > 0.001) s.pos.addScaledVector(dir.normalize(), Math.min(d, speed * step));
+      // erratic flutter offsets while airborne
+      if (s.mode === 'fly') {
+        s.pos.x += Math.sin(t * 5.1 + phase) * step * 0.18;
+        s.pos.y += Math.sin(t * 7.3 + phase * 2) * step * 0.14;
+        s.pos.z += Math.cos(t * 4.3 + phase) * step * 0.15;
+      }
+      g.rotation.y = Math.atan2(s.target.x - s.pos.x, s.target.z - s.pos.z);
+    }
+    g.position.copy(s.pos);
+
+    // wingbeats: frantic in flight, a slow fan at rest
+    const flap =
+      s.mode === 'rest'
+        ? Math.sin(t * 2.2 + phase) * 0.35 + 0.75 // mostly closed, breathing open
+        : Math.sin(t * 16 + phase) * 1.0;
     if (wingL.current) wingL.current.rotation.y = flap;
     if (wingR.current) wingR.current.rotation.y = -flap;
   });
@@ -856,6 +1076,8 @@ function Dragonfly({ center, phase }: { center: [number, number, number]; phase:
   useFrame(({ clock }) => {
     const g = ref.current;
     if (!g) return;
+    g.visible = WORLD.dayness > 0.05; // dragonflies hunt by daylight
+    if (!g.visible) return;
     const t = clock.elapsedTime * 0.7 + phase;
     const seg = t / 1.4;
     const p = MathUtils.smoothstep(seg % 1, 0, 0.35); // quick dart then hover
@@ -900,6 +1122,8 @@ function Squirrel() {
   useFrame(({ clock }) => {
     const g = ref.current;
     if (!g) return;
+    g.visible = WORLD.night < 0.7; // squirrels turn in early
+    if (!g.visible) return;
     const t = clock.elapsedTime * 0.45;
     const seg = Math.floor(t) % points.length;
     const next = (seg + 1) % points.length;
@@ -1028,6 +1252,9 @@ function Raccoon() {
   useFrame(({ clock }) => {
     const g = ref.current;
     if (!g) return;
+    // raccoons work the dusk-to-dawn shift
+    g.visible = WORLD.night > 0.15 || WORLD.dusk > 0.25;
+    if (!g.visible) return;
     // waddle with pauses: eased progress
     const raw = clock.elapsedTime * 0.006;
     const t = (raw + Math.sin(raw * 20) * 0.004) % 1;
@@ -1077,6 +1304,315 @@ function Raccoon() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Fireflies — dusk & night only, gathering near grass and bushes.    */
+/* ------------------------------------------------------------------ */
+
+function Fireflies() {
+  const COUNT =
+    typeof window !== 'undefined' && (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 1)
+      ? 42
+      : 72;
+  const ref = useRef<InstancedMesh>(null);
+  const flies = useMemo(() => {
+    const r = seeded(1379);
+    // cluster around the bushes and thick grass, a few roaming the meadow
+    const hubs: [number, number][] = [
+      [-9.4, -7.4], [11.2, -6.6], [-17, -9], [17.8, -9.8], [2.2, -13.6], [-24, -14], [5.5, -5], [-4.5, -4.6],
+    ];
+    return Array.from({ length: COUNT }, (_, i) => {
+      const hub = hubs[i % hubs.length];
+      return {
+        x: hub[0] + (r() - 0.5) * 3.4,
+        z: hub[1] + (r() - 0.5) * 2.6,
+        y: 0.15 + r() * 0.75,
+        p1: r() * Math.PI * 2,
+        p2: r() * Math.PI * 2,
+        f1: 0.3 + r() * 0.5,
+        f2: 0.2 + r() * 0.4,
+        blink: 0.5 + r() * 1.1,       // pulse frequency
+        session: 0.03 + r() * 0.05,   // slow on/off "spawn" cycle
+        sPhase: r() * Math.PI * 2,
+      };
+    });
+  }, [COUNT]);
+
+  useFrame(({ clock }) => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    // the firefly window: they rise at dusk, own the night, vanish by day
+    const window_ = Math.max(WORLD.dusk, WORLD.night * 0.95);
+    mesh.visible = window_ > 0.03;
+    if (!mesh.visible) return;
+
+    const t = clock.elapsedTime;
+    flies.forEach((f, i) => {
+      // organic drift — three incommensurate periods, never a visible loop
+      const x = f.x + Math.sin(t * f.f1 + f.p1) * 0.7 + Math.sin(t * 0.13 + f.p2) * 0.5;
+      const y = f.y + Math.sin(t * f.f2 + f.p2) * 0.28 + Math.sin(t * 1.7 + f.p1) * 0.05;
+      const z = f.z + Math.cos(t * f.f1 * 0.8 + f.p2) * 0.6;
+      // individual appears/disappears on its own slow cycle
+      const session = MathUtils.smoothstep(Math.sin(t * f.session + f.sPhase), 0.0, 0.35);
+      // soft pulsing glow, biased dark (fireflies flash, they don't strobe)
+      const pulse = Math.max(0, Math.sin(t * f.blink + f.p1)) ** 3;
+      const glow = session * (0.15 + pulse * 0.85) * window_;
+
+      dummy.position.set(x, y, z);
+      dummy.scale.setScalar(glow > 0.01 ? 1 : 0.001);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      mesh.setColorAt(i, tmpColor.set('#d8f59a').multiplyScalar(glow * 2.2));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, COUNT]} frustumCulled={false}>
+      <sphereGeometry args={[0.016, 6, 5]} />
+      <meshBasicMaterial color="#d8f59a" toneMapped={false} transparent opacity={0.9} blending={AdditiveBlending} depthWrite={false} />
+    </instancedMesh>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Owl — a rare nighttime discovery on the rooftops.                  */
+/* ------------------------------------------------------------------ */
+
+const OWL_PERCHES: [number, number, number][] = [
+  [-13.2, 12.36, -13.9],  // left tower parapet
+  [13.2, 14.86, -14.7],   // right tower parapet
+  [4, 4.68, -12.6],       // utility pole crossarm
+];
+
+type OwlMode = 'hidden' | 'perch' | 'fly';
+
+function Owl() {
+  const ref = useRef<Group>(null);
+  const head = useRef<Group>(null);
+  const wingL = useRef<Group>(null);
+  const wingR = useRef<Group>(null);
+  const st = useRef({
+    mode: 'hidden' as OwlMode,
+    until: 12,
+    perch: 0,
+    from: new Vector3(),
+    to: new Vector3(),
+    t0: 0,
+    dur: 5,
+    headYaw: 0,
+    nextHead: 0,
+  });
+
+  useFrame(({ clock }, dt) => {
+    const g = ref.current;
+    if (!g) return;
+    const s = st.current;
+    const t = clock.elapsedTime;
+    const night = WORLD.night;
+
+    // strictly nocturnal — daylight sends it away mid-whatever
+    if (night < 0.35) {
+      g.visible = false;
+      s.mode = 'hidden';
+      s.until = t + 15;
+      return;
+    }
+
+    if (s.mode === 'hidden') {
+      g.visible = false;
+      if (t > s.until) {
+        // appear on a random perch — a discovery, not a fixture
+        s.perch = Math.floor(Math.random() * OWL_PERCHES.length);
+        const p = OWL_PERCHES[s.perch];
+        g.position.set(p[0], p[1], p[2]);
+        s.mode = 'perch';
+        s.until = t + 14 + Math.random() * 22;
+        s.nextHead = t + 1;
+        g.visible = true;
+      }
+      return;
+    }
+
+    g.visible = true;
+
+    if (s.mode === 'perch') {
+      // owl stillness: frozen, then the head snaps to a new bearing
+      if (t > s.nextHead) {
+        s.headYaw = (Math.random() - 0.5) * 2.4;
+        s.nextHead = t + 1.4 + Math.random() * 3.2;
+      }
+      if (head.current) {
+        head.current.rotation.y += (s.headYaw - head.current.rotation.y) * Math.min(1, dt * 10);
+      }
+      // breathing
+      g.scale.setScalar(1 + Math.sin(t * 1.3) * 0.012);
+      if (wingL.current) wingL.current.rotation.z = 0.08;
+      if (wingR.current) wingR.current.rotation.z = -0.08;
+
+      if (t > s.until) {
+        const r = Math.random();
+        if (r < 0.45) {
+          // glide to a different rooftop
+          const next = (s.perch + 1 + Math.floor(Math.random() * (OWL_PERCHES.length - 1))) % OWL_PERCHES.length;
+          s.from.copy(g.position);
+          const p = OWL_PERCHES[next];
+          s.to.set(p[0], p[1], p[2]);
+          s.perch = next;
+          s.mode = 'fly';
+          s.t0 = t;
+          s.dur = 4 + s.from.distanceTo(s.to) * 0.12;
+        } else {
+          // melt back into the darkness for a long while
+          s.from.copy(g.position);
+          s.to.set(g.position.x * 1.6, g.position.y + 6, -46);
+          s.mode = 'fly';
+          s.t0 = t;
+          s.dur = 5;
+          s.until = -1; // flag: vanish at the end of this flight
+        }
+      }
+      return;
+    }
+
+    // fly — a silent arcing glide
+    const p = Math.min(1, (t - s.t0) / s.dur);
+    const ease = p * p * (3 - 2 * p);
+    scratchV.lerpVectors(s.from, s.to, ease);
+    scratchV.y += Math.sin(p * Math.PI) * 2.2; // arc up between roofs
+    const dirX = s.to.x - s.from.x;
+    const dirZ = s.to.z - s.from.z;
+    g.position.copy(scratchV);
+    g.rotation.y = Math.atan2(dirX, dirZ);
+    // slow, deep wingbeats with long glides between
+    const beat = Math.sin(t * 4.5) * Math.max(0, Math.sin(p * Math.PI * 3)) * 0.9;
+    if (wingL.current) wingL.current.rotation.z = 0.15 + beat;
+    if (wingR.current) wingR.current.rotation.z = -0.15 - beat;
+    if (head.current) head.current.rotation.y *= 0.9;
+
+    if (p >= 1) {
+      if (s.until === -1) {
+        s.mode = 'hidden';
+        s.until = t + 25 + Math.random() * 45; // long absences make sightings special
+      } else {
+        s.mode = 'perch';
+        s.until = t + 12 + Math.random() * 20;
+        s.nextHead = t + 0.8;
+      }
+    }
+  });
+
+  return (
+    <group ref={ref} visible={false} scale={1.15}>
+      {/* body */}
+      <mesh position={[0, 0.11, 0]} scale={[0.95, 1.25, 0.9]}>
+        <sphereGeometry args={[0.085, 12, 10]} />
+        <meshStandardMaterial color="#6b5942" roughness={1} />
+      </mesh>
+      {/* breast speckle */}
+      <mesh position={[0, 0.09, 0.055]} scale={[0.7, 1.0, 0.5]}>
+        <sphereGeometry args={[0.06, 10, 8]} />
+        <meshStandardMaterial color="#8f7c5f" roughness={1} />
+      </mesh>
+      <group ref={head} position={[0, 0.24, 0]}>
+        <mesh>
+          <sphereGeometry args={[0.062, 12, 10]} />
+          <meshStandardMaterial color="#75634a" roughness={1} />
+        </mesh>
+        {/* ear tufts */}
+        {[-0.035, 0.035].map((x) => (
+          <mesh key={x} position={[x, 0.055, 0]} rotation={[0, 0, x * 6]}>
+            <coneGeometry args={[0.014, 0.045, 6]} />
+            <meshStandardMaterial color="#5c4c38" roughness={1} />
+          </mesh>
+        ))}
+        {/* facial disc + eyes that catch the monitor glow */}
+        <mesh position={[0, 0.005, 0.045]} scale={[1.15, 1, 0.5]}>
+          <sphereGeometry args={[0.045, 10, 8]} />
+          <meshStandardMaterial color="#9a8666" roughness={1} />
+        </mesh>
+        {[-0.022, 0.022].map((x) => (
+          <mesh key={`oeye${x}`} position={[x, 0.012, 0.062]}>
+            <sphereGeometry args={[0.011, 8, 6]} />
+            <meshBasicMaterial color="#e8c46a" toneMapped={false} />
+          </mesh>
+        ))}
+        <mesh position={[0, -0.012, 0.066]} rotation={[0.5, 0, 0]}>
+          <coneGeometry args={[0.008, 0.022, 5]} />
+          <meshStandardMaterial color="#3a2e20" roughness={1} />
+        </mesh>
+      </group>
+      {/* folded wings */}
+      <group ref={wingL} position={[0.07, 0.13, -0.01]}>
+        <mesh rotation={[0, 0, -0.25]} scale={[0.5, 1.1, 0.8]}>
+          <sphereGeometry args={[0.06, 8, 7]} />
+          <meshStandardMaterial color="#5c4c38" roughness={1} />
+        </mesh>
+      </group>
+      <group ref={wingR} position={[-0.07, 0.13, -0.01]}>
+        <mesh rotation={[0, 0, 0.25]} scale={[0.5, 1.1, 0.8]}>
+          <sphereGeometry args={[0.06, 8, 7]} />
+          <meshStandardMaterial color="#5c4c38" roughness={1} />
+        </mesh>
+      </group>
+      {/* talons gripping the parapet */}
+      {[-0.028, 0.028].map((x) => (
+        <mesh key={x} position={[x, 0.015, 0.01]}>
+          <cylinderGeometry args={[0.008, 0.006, 0.03, 5]} />
+          <meshStandardMaterial color="#3a3226" roughness={1} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Fox den — half-hidden under the far-left brush.                    */
+/* ------------------------------------------------------------------ */
+
+function FoxDen() {
+  return (
+    <group position={[DEN.x, 0, DEN.z]}>
+      {/* excavated dirt mound */}
+      <mesh position={[0, 0.07, 0.35]} scale={[1.5, 0.5, 1.1]}>
+        <sphereGeometry args={[0.55, 10, 8]} />
+        <meshStandardMaterial color="#4a3d2b" roughness={1} />
+      </mesh>
+      {/* the dark entrance tunnel */}
+      <mesh position={[0, 0.16, 0.72]} rotation={[0.5, 0, 0]}>
+        <circleGeometry args={[0.24, 12]} />
+        <meshBasicMaterial color="#070604" />
+      </mesh>
+      <mesh position={[0, 0.28, 0.55]} rotation={[0.35, 0, 0.1]} scale={[1.25, 0.55, 1]}>
+        <torusGeometry args={[0.26, 0.07, 6, 10, Math.PI]} />
+        <meshStandardMaterial color="#57462f" roughness={1} />
+      </mesh>
+      {/* fallen debris concealing it */}
+      <mesh position={[-0.55, 0.14, 0.3]} rotation={[0.1, 0.7, 0.05]}>
+        <cylinderGeometry args={[0.05, 0.07, 1.3, 6]} />
+        <meshStandardMaterial color="#4a3b28" roughness={1} />
+      </mesh>
+      <mesh position={[0.5, 0.1, 0.55]} rotation={[0.2, -0.4, 0.6]}>
+        <cylinderGeometry args={[0.035, 0.05, 0.8, 5]} />
+        <meshStandardMaterial color="#3f3222" roughness={1} />
+      </mesh>
+      {/* scratched-out earth in front */}
+      <mesh position={[0, 0.015, 0.95]} rotation={[-Math.PI / 2, 0, 0.4]}>
+        <circleGeometry args={[0.5, 10]} />
+        <meshStandardMaterial color="#57503a" roughness={1} />
+      </mesh>
+      {/* a few scattered bones from past hunts — subtle storytelling */}
+      {[[0.28, 1.05, 0.9], [-0.2, 1.15, 2.2]].map(([x, z, ry], i) => (
+        <mesh key={i} position={[x, 0.03, z]} rotation={[0, ry, 0]}>
+          <capsuleGeometry args={[0.012, 0.09, 4, 6]} />
+          <meshStandardMaterial color="#c9bda5" roughness={1} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Assembly.                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -1097,8 +1633,8 @@ export default function Wildlife() {
 
   return (
     <group>
-      {/* herd grazing beside the old road — close enough to actually see */}
-      <Deer position={[-9.5, 0, -8.5]} facing={0.5} phase={0} buck />
+      {/* herd grazing beside the old road — the buck leads them to water */}
+      <Deer position={[-9.5, 0, -8.5]} facing={0.5} phase={0} buck lead />
       <Deer position={[-11.5, 0, -10]} facing={-0.4} phase={3.2} />
       <Deer position={[-8, 0, -11]} facing={1.1} phase={6.1} />
       <Deer position={[-13, 0, -8]} facing={0.2} phase={9.4} />
@@ -1155,6 +1691,13 @@ export default function Wildlife() {
       {/* ground-level wanderers */}
       <Snake />
       <Raccoon />
+
+      {/* the hidden den the fox retreats to at midday */}
+      <FoxDen />
+
+      {/* dusk & night life */}
+      <Fireflies />
+      <Owl />
     </group>
   );
 }

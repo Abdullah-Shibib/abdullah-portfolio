@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Vector3 } from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import gsap from 'gsap';
 import { DEFAULT_CAMERA, monitorById, monitorCamera } from '@/lib/data';
 import { useCommandCenter } from '@/lib/store';
+import { useViewport } from '@/lib/viewport';
 
 /** Room view compensation for narrow (portrait) viewports: pull back so the
  *  whole monitor wall still fits in frame. */
@@ -21,19 +22,33 @@ function roomCamera(aspect: number) {
   };
 }
 
+/** Canvas aspect, published only after resizing goes quiet — so an
+ *  orientation flip triggers ONE clean reframe instead of a flight
+ *  restarted on every intermediate size the browser reports. */
+function useSettledAspect() {
+  const size = useThree((s) => s.size);
+  const [aspect, setAspect] = useState(() => size.width / Math.max(1, size.height));
+  useEffect(() => {
+    const next = size.width / Math.max(1, size.height);
+    const id = setTimeout(() => {
+      setAspect((a) => (Math.abs(a - next) > 0.002 ? next : a));
+    }, 120);
+    return () => clearTimeout(id);
+  }, [size]);
+  return aspect;
+}
+
 /**
  * Cinematic camera: GSAP flights between the room view and each monitor,
  * with idle breathing and gentle mouse parallax layered on top.
  */
 export default function CameraRig() {
   const camera = useThree((s) => s.camera);
-  const size = useThree((s) => s.size);
   const focused = useCommandCenter((s) => s.focused);
   const booted = useCommandCenter((s) => s.booted);
   const { setTransitioning, setPanelOpen } = useCommandCenter.getState();
-  const aspect = size.width / Math.max(1, size.height);
-  const mobile = typeof window !== 'undefined' &&
-    (window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth < 700);
+  const aspect = useSettledAspect();
+  const mobile = useViewport((s) => s.mobile);
 
   // GSAP animates these; useFrame composes them with breathing + parallax.
   const base = useMemo(
@@ -69,7 +84,8 @@ export default function CameraRig() {
   }, [booted, base, mobile]);
 
   /* Fly to the focused monitor / back to the room.
-     Re-runs on viewport aspect change so orientation flips reframe cleanly. */
+     Re-runs when the SETTLED aspect changes, so an orientation flip
+     reframes exactly once — preserving focus state, never resetting it. */
   useEffect(() => {
     if (!booted) return;
     const dest = focused ? monitorCamera(monitorById(focused), aspect) : roomCamera(aspect);

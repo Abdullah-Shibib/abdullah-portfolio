@@ -424,6 +424,43 @@ export function leafCluster(seed: number, kind: 'canopy' | 'ivy' | 'fern') {
 /*  Soft cloud puff.                                                   */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  Moon disc — cratered face with a soft atmospheric halo.            */
+/* ------------------------------------------------------------------ */
+
+export function moonDisc() {
+  const S = 256;
+  const [c, g] = makeCanvas(S, S);
+  const r = seeded(97);
+  const cx = S / 2;
+  // halo
+  const halo = g.createRadialGradient(cx, cx, S * 0.18, cx, cx, S * 0.5);
+  halo.addColorStop(0, 'rgba(214,224,238,0.5)');
+  halo.addColorStop(1, 'rgba(214,224,238,0)');
+  g.fillStyle = halo;
+  g.fillRect(0, 0, S, S);
+  // disc
+  const disc = g.createRadialGradient(cx - 14, cx - 14, 4, cx, cx, S * 0.22);
+  disc.addColorStop(0, '#f2f5f8');
+  disc.addColorStop(0.8, '#ccd6e2');
+  disc.addColorStop(1, '#aab6c6');
+  g.fillStyle = disc;
+  g.beginPath();
+  g.arc(cx, cx, S * 0.22, 0, Math.PI * 2);
+  g.fill();
+  // maria + craters
+  for (let i = 0; i < 14; i++) {
+    const a = r() * Math.PI * 2;
+    const d = r() * S * 0.16;
+    const rad = 3 + r() * 12;
+    g.fillStyle = `rgba(120,134,152,${0.1 + r() * 0.16})`;
+    g.beginPath();
+    g.arc(cx + Math.cos(a) * d, cx + Math.sin(a) * d, rad, 0, Math.PI * 2);
+    g.fill();
+  }
+  return toTexture(c);
+}
+
 export function cloudPuff(seed: number) {
   const W = 512;
   const H = 256;

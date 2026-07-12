@@ -9,6 +9,7 @@ import { useFrame } from '@react-three/fiber';
 import { MeshReflectorMaterial } from '@react-three/drei';
 import { seeded } from '@/lib/data';
 import { asphalt, brickFacade, cloudPuff, distantFacade, grassCard, leafCluster } from '@/lib/textures';
+import { WORLD } from '@/lib/world';
 import DeskArea from './DeskArea';
 
 /* Shared golden-hour sun direction (mirrored in Experience's <Sky>). */
@@ -361,7 +362,8 @@ function BrickBuilding({ x, z, w, h, floors, cols, tone = 0, decay = 0.5, rotY =
   const ivy = useMemo(() => leafCluster(seed + 40, 'ivy'), [seed]);
   const vineSway = useRef<Group>(null);
   useFrame(({ clock }) => {
-    if (vineSway.current) vineSway.current.rotation.x = Math.sin(clock.elapsedTime * 0.4 + seed) * 0.02;
+    if (vineSway.current)
+      vineSway.current.rotation.x = Math.sin(clock.elapsedTime * 0.4 + seed) * (0.008 + WORLD.wind * 0.05);
   });
   const d = w * 0.85;
 
@@ -682,9 +684,11 @@ function GrassField() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupsByKind]);
 
-  // wind: re-pose only the swaying subset
+  // wind: re-pose only the swaying subset — amplitude rides the live wind,
+  // and a position-based phase makes gusts travel across the meadow
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
+    const amp = 0.03 + WORLD.wind * 0.17;
     groupsByKind.forEach((list, k) => {
       const meshes = [refs[k].current, refsB[k].current];
       list.forEach((cl, i) => {
@@ -693,7 +697,7 @@ function GrassField() {
           if (!mesh) return;
           const h = cl.s * heightScale;
           dummy.position.set(cl.x, h * 0.5, cl.z);
-          dummy.rotation.set(0, cl.rot + (mi ? Math.PI / 2 : 0), Math.sin(t * cl.sway + cl.phase) * 0.09);
+          dummy.rotation.set(0, cl.rot + (mi ? Math.PI / 2 : 0), Math.sin(t * cl.sway + cl.phase + cl.x * 0.14) * amp);
           dummy.scale.set(cl.s * 1.4, h, 1);
           dummy.updateMatrix();
           mesh.setMatrixAt(i, dummy.matrix);
@@ -775,8 +779,9 @@ function Tree({ position, scale = 1, seed }: { position: [number, number, number
   const phase = seed * 1.7;
   useFrame(({ clock }) => {
     if (foliage.current) {
-      foliage.current.rotation.z = Math.sin(clock.elapsedTime * 0.5 + phase) * 0.02;
-      foliage.current.rotation.x = Math.cos(clock.elapsedTime * 0.37 + phase) * 0.014;
+      const amp = 0.01 + WORLD.wind * 0.055;
+      foliage.current.rotation.z = Math.sin(clock.elapsedTime * 0.5 + phase) * amp;
+      foliage.current.rotation.x = Math.cos(clock.elapsedTime * 0.37 + phase) * amp * 0.7;
     }
   });
   return (
@@ -1311,11 +1316,22 @@ function Clouds() {
     }));
   }, []);
 
-  useFrame(({ clock }) => {
+  const drift = useRef(0);
+  useFrame((_, dt) => {
+    // wind pushes the deck; accumulated distance keeps motion continuous
+    drift.current += Math.min(dt, 0.1) * (0.4 + WORLD.wind * 2.2);
+    const cover = WORLD.cloud;
+    const shade = 1 - cover * 0.5 + WORLD.lightning * 0.9; // storms darken, strikes light them up
+    const brightness = Math.max(0.2, shade) * (0.35 + WORLD.dayness * 0.65);
     defs.forEach((d, i) => {
       const g = refs.current[i];
       if (!g) return;
-      g.position.x = ((d.x0 + clock.elapsedTime * d.speed + 90) % 180) - 90;
+      g.position.x = ((d.x0 + drift.current * d.speed + 90) % 180) - 90;
+      const m = (g.children[0] as any)?.material;
+      if (m) {
+        m.opacity = 0.1 + cover * 0.55;
+        m.color.setScalar(brightness);
+      }
     });
   });
 
@@ -1346,9 +1362,12 @@ function Clouds() {
 function MistPlane({ x, y, z, s, tex, phase }: { x: number; y: number; z: number; s: number; tex: any; phase: number }) {
   const ref = useRef<Group>(null);
   useFrame(({ clock }) => {
-    if (ref.current) {
-      ref.current.position.x = x + Math.sin(clock.elapsedTime * 0.05 + phase) * 3;
-    }
+    const g = ref.current;
+    if (!g) return;
+    g.position.x = x + Math.sin(clock.elapsedTime * 0.05 + phase) * 3;
+    // ground fog thickens with misty weather and creeps in at night
+    const m = (g.children[0] as any)?.material;
+    if (m) m.opacity = 0.12 + WORLD.mist * 0.55 + WORLD.night * 0.12;
   });
   return (
     <group ref={ref} position={[x, y, z]}>
@@ -1383,6 +1402,9 @@ function Pollen() {
   useFrame(({ clock }, dt) => {
     const pts = ref.current;
     if (!pts) return;
+    // pollen is a daytime thing — fireflies own the night
+    (pts.material as any).opacity = 0.45 * WORLD.dayness;
+    pts.visible = WORLD.dayness > 0.03;
     const arr = pts.geometry.attributes.position.array as Float32Array;
     const t = clock.elapsedTime;
     for (let i = 0; i < speeds.length; i++) {
@@ -1491,13 +1513,16 @@ function GustLeaves() {
       z: -11 + r() * 4.5, speed: 1.6 + r() * 2.4, phase: r() * 60, bounce: 1.2 + r() * 2.5,
     }));
   }, []);
-  useFrame(({ clock }) => {
+  const travel = useRef(0);
+  useFrame(({ clock }, dt) => {
     const mesh = ref.current;
     if (!mesh) return;
     const t = clock.elapsedTime;
+    // leaves skitter with the live wind — near-still in a calm, racing in gusts
+    travel.current += Math.min(dt, 0.1) * (0.15 + WORLD.wind * 2.4);
     data.forEach((l, i) => {
-      const x = (((t * l.speed + l.phase) % 44) + 44) % 44 - 22;
-      dummy.position.set(x, 0.06 + Math.abs(Math.sin(t * l.bounce + l.phase)) * 0.25, l.z);
+      const x = (((travel.current * l.speed + l.phase) % 44) + 44) % 44 - 22;
+      dummy.position.set(x, 0.06 + Math.abs(Math.sin(t * l.bounce + l.phase)) * (0.1 + WORLD.wind * 0.3), l.z);
       dummy.rotation.set(t * 3 + l.phase, t * 2, t * 2.4);
       dummy.scale.setScalar(1);
       dummy.updateMatrix();
@@ -1515,11 +1540,22 @@ function GustLeaves() {
 
 /** Soft volumetric shafts slanting in from the low sun. */
 function GodRays() {
+  const g = useRef<Group>(null);
   const rays: [number, number, number, number][] = [
     [-4, -8, 0.5, 1], [3, -11, 0.42, 1.4], [9, -6, 0.55, 0.8], [-11, -13, 0.46, 1.2],
   ];
+  useFrame(() => {
+    const grp = g.current;
+    if (!grp) return;
+    // shafts belong to low clear sun — gone at night, buried under overcast
+    const o = (0.006 + WORLD.golden * 0.04 + WORLD.dayness * 0.008) * (1 - WORLD.cloud * 0.85);
+    grp.visible = o > 0.004;
+    grp.children.forEach((child: any) => {
+      if (child.material) child.material.opacity = o;
+    });
+  });
   return (
-    <group>
+    <group ref={g}>
       {rays.map(([x, z, tilt, s], i) => (
         <mesh key={i} position={[x, 5.5, z]} rotation={[0, 0, tilt]}>
           <coneGeometry args={[2.4 * s, 11, 12, 1, true]} />
@@ -1711,12 +1747,53 @@ export default function Room() {
       <Streetlight position={[-6.5, 0, -8]} />
       <Streetlight position={[7.5, 0, -10]} bend={0.65} />
 
-      {/* golden-hour lighting */}
-      <directionalLight position={[SUN[0], SUN[1] + 4, SUN[2]]} intensity={1.35} color="#ffd9a0" />
-      <directionalLight position={[-10, 8, 14]} intensity={0.22} color="#9ab0c9" />
-      <hemisphereLight args={['#a8a488', '#2b3222', 0.38]} />
-      <ambientLight intensity={0.12} color="#c9b890" />
-      <pointLight position={[0, 1.3, -0.7]} intensity={1.4} distance={3.5} color="#ffd28a" decay={2} />
+      <DynamicLights />
+    </group>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Light rig — every value tracks the world clock and weather.        */
+/* ------------------------------------------------------------------ */
+
+const HEMI_SKY_DAY = new Color('#a8a488');
+const HEMI_SKY_NIGHT = new Color('#232c3e');
+const HEMI_GND_DAY = new Color('#2b3222');
+const HEMI_GND_NIGHT = new Color('#0b0e12');
+
+function DynamicLights() {
+  const sun = useRef<any>(null);
+  const rim = useRef<any>(null);
+  const hemi = useRef<any>(null);
+  const amb = useRef<any>(null);
+  const desk = useRef<any>(null);
+
+  useFrame(() => {
+    const w = WORLD;
+    if (sun.current) {
+      sun.current.position.set(w.sunPos.x, w.sunPos.y + 4, w.sunPos.z);
+      sun.current.intensity = w.sunIntensity;
+      sun.current.color.copy(w.sunColor);
+      sun.current.visible = w.sunIntensity > 0.01;
+    }
+    if (rim.current) rim.current.intensity = 0.05 + w.dayness * 0.17;
+    if (hemi.current) {
+      hemi.current.intensity = w.hemiIntensity;
+      hemi.current.color.copy(HEMI_SKY_DAY).lerp(HEMI_SKY_NIGHT, w.night);
+      hemi.current.groundColor.copy(HEMI_GND_DAY).lerp(HEMI_GND_NIGHT, w.night);
+    }
+    if (amb.current) amb.current.intensity = w.ambientIntensity;
+    // the camp glow reads stronger once darkness falls — monitors become beacons
+    if (desk.current) desk.current.intensity = 1.4 + w.night * 0.6;
+  });
+
+  return (
+    <group>
+      <directionalLight ref={sun} position={[SUN[0], SUN[1] + 4, SUN[2]]} intensity={1.35} color="#ffd9a0" />
+      <directionalLight ref={rim} position={[-10, 8, 14]} intensity={0.22} color="#9ab0c9" />
+      <hemisphereLight ref={hemi} args={['#a8a488', '#2b3222', 0.38]} />
+      <ambientLight ref={amb} intensity={0.12} color="#c9b890" />
+      <pointLight ref={desk} position={[0, 1.3, -0.7]} intensity={1.4} distance={3.5} color="#ffd28a" decay={2} />
     </group>
   );
 }

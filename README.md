@@ -2,13 +2,22 @@
 
 A cinematic 3D portfolio built with **Next.js + TypeScript + React Three Fiber**.
 
-Decades after the collapse, nature has reclaimed the city. In a golden-hour meadow of
-ruins — ivy-covered towers, a collapsed highway overpass, grazing deer, a slithering
+Decades after the collapse, nature has reclaimed the city. In a meadow of
+ruins — ivy-covered towers, grazing deer, a slithering
 snake — an abandoned emergency command center still quietly hums. An empty, dust-filmed
-chair sits pushed back from a scaffold wall of seven live monitors; a dusty PC tower's
+chair sits pushed back from a scaffold wall of eight live monitors; a dusty PC tower's
 RGB fans cycle in the dark. Click any monitor (or use the nav chips) and the camera
 flies in with a CRT power-on flicker; the screen expands into a full, crisp DOM panel.
 Press `Esc` to fade smoothly back into the room.
+
+The world is alive: a full **day/night cycle** rolls golden hour into moonlit night
+(stars, fireflies, an owl on the rooftops) and back through misty dawn, while a
+**procedural weather system** drifts between clear skies, cloud decks, ground fog,
+and distant storm fronts with far-off lightning. Wind gusts move the grass, trees,
+vines, and leaves in sync. Wildlife runs on behavior state machines — deer graze,
+listen, drink from puddles (sometimes the whole herd gathers), the fox patrols,
+hunts rabbits, and retreats to a hidden den, butterflies land and rest, and the
+birds go to roost at dusk. The HUD's `WX:` readout shows the live conditions.
 
 The desk itself is interactive — drag the coffee mug or loose papers and they spring
 back with real inertia, click the notebook to flip it open, switch on the flashlight
@@ -29,7 +38,9 @@ Everything content-related (links, skills, timeline, projects fallback) lives in
 live via an API route — see [Dynamic projects](#dynamic-projects) below.
 
 Dev flags: `/?fast=1` skips the boot intro; `&focus=<monitor-id>` deep-links a monitor
-(e.g. `network`, `about`, `ml`, `projects`, `timeline`, `skills`, `contact`).
+(e.g. `network`, `about`, `ml`, `projects`, `timeline`, `skills`, `contact`, `assistant`);
+`&tod=0..1` pins the time of day (0 = midnight, 0.5 = noon); `&wx=<kind>` pins the
+weather (`clear`, `partly`, `overcast`, `mist`, `fogbank`, `storm`).
 
 Fully responsive: phones and tablets get a pulled-back camera that keeps the wall in
 frame in portrait or landscape, touch-friendly nav chips, scrollable panels, and a
@@ -46,6 +57,7 @@ reduced render budget (capped DPR, lighter vegetation).
 | **Mission Log** | Career timeline: education, internships, and leadership milestones. |
 | **Deployments** | Project cards generated live from a local folder (see below). |
 | **Uplink** | Contact links + resume download. |
+| **AXIS Intelligence** | The command center's surviving AI — a terminal chat assistant grounded in the portfolio data. It answers questions about Abdullah (internships, projects, skills, leadership, goals), understands follow-ups, and can drive the wall ("open projects", "show skills"). Works fully offline via a local retrieval engine; set `ANTHROPIC_API_KEY` in the server environment to upgrade it to a live Claude model with streaming replies (same grounding, still won't invent facts). |
 
 ## Dynamic projects
 

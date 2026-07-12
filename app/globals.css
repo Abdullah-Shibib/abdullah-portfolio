@@ -12,6 +12,8 @@ body {
   height: 100%;
   background: #0c0c09;
   overscroll-behavior: none;
+  /* kill double-tap zoom on every browser that honors it (iOS 13+, Android) */
+  touch-action: manipulation;
 }
 
 .scene-scroll {
@@ -47,6 +49,40 @@ body {
 
   .scene-stage canvas {
     touch-action: pan-x;
+  }
+}
+
+/* ---------- Phones held sideways: compact, thumb-first chrome ---------- */
+/* Landscape is NOT the desktop layout squeezed short — chrome shrinks,
+   tap targets stay ≥36px, and the notch safe-areas are respected. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 560px) {
+  .scene-stage {
+    width: 100%;
+    height: 100dvh;
+  }
+
+  .hud-top {
+    padding-top: max(0.4rem, env(safe-area-inset-top));
+  }
+  .hud-top .font-display {
+    font-size: 11px;
+  }
+
+  .hud-nav .hud-chip {
+    min-height: 36px;
+    padding: 0.4rem 0.75rem;
+    font-size: 10px;
+  }
+
+  .focus-overlay {
+    padding: 0.5rem max(0.5rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left)) !important;
+  }
+}
+
+/* Comfortable tap targets on every touch device */
+@media (pointer: coarse) {
+  .hud-chip {
+    min-height: 38px;
   }
 }
 

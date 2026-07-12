@@ -2,11 +2,12 @@
 
 import { Suspense, useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Preload, Sky } from '@react-three/drei';
+import { Preload } from '@react-three/drei';
 import { EffectComposer, Bloom, DepthOfField, Vignette } from '@react-three/postprocessing';
 
 import CameraRig from './CameraRig';
-import Room, { SUN } from './Room';
+import Environment3D from './Environment3D';
+import Room from './Room';
 import Wildlife from './Wildlife';
 import MonitorWall from './MonitorWall';
 import { useCommandCenter } from '@/lib/store';
@@ -53,19 +54,12 @@ export default function Experience() {
         gl.toneMappingExposure = 0.76;
       }}
     >
-      {/* warm haze — atmospheric perspective over the ruins */}
+      {/* atmospheric haze — color & depth driven per-frame by lib/world */}
       <fog attach="fog" args={['#b3ac9a', 22, 80]} />
 
       <Suspense fallback={null}>
-        {/* golden-hour sky, sun low behind the skyline */}
-        <Sky
-          distance={4000}
-          sunPosition={[SUN[0], SUN[1], SUN[2]]}
-          turbidity={10}
-          rayleigh={3.8}
-          mieCoefficient={0.006}
-          mieDirectionalG={0.85}
-        />
+        {/* dynamic sky, stars, moon, weather & distant lightning */}
+        <Environment3D />
         <Room />
         <Wildlife />
         <MonitorWall />

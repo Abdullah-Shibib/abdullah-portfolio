@@ -6,6 +6,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { MONITORS, MonitorDef, MonitorId, monitorById } from '@/lib/data';
 import { useCommandCenter } from '@/lib/store';
+import { WORLD } from '@/lib/world';
 import { SCREENS } from './screens';
 
 /** Pixels of DOM content per world unit — drei maps world = px * distanceFactor / 400. */
@@ -283,6 +284,29 @@ function Monitor({ def, hovered }: MonitorProps) {
 
   return (
     <group position={def.position} rotation={[0, def.yaw, 0]}>
+      {/* the AI core sits past the scaffold's end — it gets its own salvaged rig */}
+      {def.id === 'assistant' && (
+        <group position={[0, 0, -0.12]}>
+          <mesh position={[0, -def.position[1] / 2, 0]}>
+            <cylinderGeometry args={[0.05, 0.07, def.position[1], 8]} />
+            <meshStandardMaterial color="#4f4438" metalness={0.5} roughness={0.7} />
+          </mesh>
+          {/* diagonal brace back toward the scaffold */}
+          <mesh position={[0.5, -def.position[1] * 0.55, -0.3]} rotation={[0.3, 0, -0.7]}>
+            <cylinderGeometry args={[0.03, 0.03, 1.7, 6]} />
+            <meshStandardMaterial color="#443a30" metalness={0.5} roughness={0.7} />
+          </mesh>
+          {/* ivy claiming the pole + a sandbag counterweight at the base */}
+          <mesh position={[0.02, -def.position[1] * 0.72, 0.03]}>
+            <cylinderGeometry args={[0.075, 0.09, 1.1, 6]} />
+            <meshStandardMaterial color="#44522f" roughness={1} />
+          </mesh>
+          <mesh position={[-0.15, -def.position[1] + 0.12, 0.15]} rotation={[Math.PI / 2, 0, 0.4]}>
+            <capsuleGeometry args={[0.11, 0.24, 4, 8]} />
+            <meshStandardMaterial color="#7d6e52" roughness={1} />
+          </mesh>
+        </group>
+      )}
       <group ref={tiltRef}>
         {/* wall mount */}
         <mesh position={[0, 0, -0.09]}>
@@ -459,7 +483,9 @@ export default function MonitorWall() {
 
   useFrame((_, dt) => {
     const k = Math.min(1, dt * 4);
-    const targets = power ? [7, 3, 3] : [0, 0, 0];
+    // after dark the monitor glow carries the camp — the wall becomes the focal point
+    const boost = 1 + WORLD.night * 0.65;
+    const targets = power ? [7 * boost, 3 * boost, 3 * boost] : [0, 0, 0];
     lights.current.forEach((l, i) => {
       if (l) l.intensity += (targets[i] - l.intensity) * k;
     });

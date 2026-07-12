@@ -7,6 +7,7 @@ import ProjectsScreen from './ProjectsScreen';
 import TimelineScreen from './TimelineScreen';
 import SkillsScreen from './SkillsScreen';
 import ContactScreen from './ContactScreen';
+import AssistantScreen from './AssistantScreen';
 
 export const SCREENS: Record<MonitorId, ComponentType<{ expanded?: boolean }>> = {
   network: NetworkScreen,
@@ -16,4 +17,5 @@ export const SCREENS: Record<MonitorId, ComponentType<{ expanded?: boolean }>> =
   timeline: TimelineScreen,
   skills: SkillsScreen,
   contact: ContactScreen,
+  assistant: AssistantScreen,
 };

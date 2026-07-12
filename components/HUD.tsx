@@ -4,7 +4,18 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { MONITORS, monitorById } from '@/lib/data';
 import { useCommandCenter } from '@/lib/store';
+import { useViewport } from '@/lib/viewport';
+import { useWorldMeta } from '@/lib/world';
 import { SCREENS } from './screens';
+
+const WX_LABELS: Record<string, string> = {
+  clear: 'CLEAR',
+  partly: 'PARTLY CLOUDY',
+  overcast: 'OVERCAST',
+  mist: 'MIST',
+  fogbank: 'FOG',
+  storm: 'STORM FRONT',
+};
 
 /* ------------------------------------------------------------------ */
 /*  Boot sequence.                                                     */
@@ -14,7 +25,8 @@ const BOOT_LINES = [
   'SOLAR ARRAY ........... 84% CHARGE',
   'SCAVENGED UPLINK ...... WEAK / STABLE',
   'DECRYPTING WORKSPACE .. OK',
-  'MONITOR ARRAY ......... 7/7 ONLINE',
+  'MONITOR ARRAY ......... 8/8 ONLINE',
+  'AXIS INTELLIGENCE ..... AWAKE',
   'ACCESS GRANTED',
 ];
 
@@ -63,40 +75,14 @@ function BootScreen() {
 /*  Expanded monitor panel.                                            */
 /* ------------------------------------------------------------------ */
 
-/** Reading zoom for the expanded screen — scales down with the viewport so
- *  phones get a native-feeling panel instead of a cropped desktop one. */
+/** Reading zoom for the expanded screen — scales with the viewport so
+ *  phones get a native-feeling panel instead of a cropped desktop one.
+ *  Landscape phones fit by HEIGHT (the scarce axis when held sideways)
+ *  so type stays readable without the layout overflowing. */
 function usePanelZoom() {
-  const compute = () =>
-    typeof window === 'undefined' ? 1.55 : Math.min(1.55, Math.max(1, window.innerWidth / 860));
-  const [zoom, setZoom] = useState(compute);
-  // re-check on every render (React bails out when unchanged) — some mobile
-  // browsers settle their viewport after mount without firing resize
-  useEffect(() => setZoom(compute()));
-  useEffect(() => {
-    const onResize = () => setZoom(compute());
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return zoom;
-}
-
-function useIsMobilePanel() {
-  const compute = () =>
-    typeof window !== 'undefined' &&
-    (window.innerWidth < 700 || window.matchMedia?.('(pointer: coarse)').matches);
-  const [mobile, setMobile] = useState(compute);
-
-  useEffect(() => {
-    const onResize = () => setMobile(compute());
-    window.addEventListener('resize', onResize);
-    window.addEventListener('orientationchange', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('orientationchange', onResize);
-    };
-  }, []);
-
-  return mobile;
+  const { width, height, landscapePhone } = useViewport();
+  if (landscapePhone) return Math.min(1.15, Math.max(0.9, height / 430));
+  return Math.min(1.55, Math.max(1, width / 860));
 }
 
 function FocusPanel() {
@@ -105,7 +91,8 @@ function FocusPanel() {
   const focus = useCommandCenter((s) => s.focus);
   const scrollRef = useRef<HTMLDivElement>(null);
   const zoom = usePanelZoom();
-  const mobilePanel = useIsMobilePanel();
+  const mobilePanel = useViewport((s) => s.mobile);
+  const landscapePhone = useViewport((s) => s.landscapePhone);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -139,7 +126,7 @@ function FocusPanel() {
       {def && Screen && panelOpen && (
         <motion.div
           key={def.id}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-10"
+          className="focus-overlay fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-10"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: mobilePanel ? 0.14 : 0.25 } }}
@@ -157,18 +144,20 @@ function FocusPanel() {
             }}
             exit={{ scale: mobilePanel ? 0.98 : 0.94, y: mobilePanel ? 6 : 12 }}
           >
-            <div className="mb-2 flex items-end justify-between gap-2 px-1 md:mb-4">
+            <div className={`flex items-end justify-between gap-2 px-1 ${landscapePhone ? 'mb-1.5 items-center' : 'mb-2 md:mb-4'}`}>
               <div className="min-w-0">
-                <p className="truncate font-mono text-[10px] uppercase tracking-[0.3em] text-teal-400/80 sm:text-xs md:text-sm md:tracking-[0.4em]">
-                  {def.subtitle}
-                </p>
-                <h2 className="neon-text mt-1 truncate font-display text-lg tracking-[0.2em] sm:text-2xl md:text-4xl">
+                {!landscapePhone && (
+                  <p className="truncate font-mono text-[10px] uppercase tracking-[0.3em] text-teal-400/80 sm:text-xs md:text-sm md:tracking-[0.4em]">
+                    {def.subtitle}
+                  </p>
+                )}
+                <h2 className={`neon-text truncate font-display tracking-[0.2em] ${landscapePhone ? 'text-base' : 'mt-1 text-lg sm:text-2xl md:text-4xl'}`}>
                   {def.title}
                 </h2>
               </div>
               <button
                 onClick={() => focus(null)}
-                className="hud-chip shrink-0 !px-4 !py-2.5 !text-sm"
+                className="hud-chip min-h-[44px] min-w-[44px] shrink-0 !px-4 !py-2.5 !text-sm"
                 aria-label="Return to the camp"
               >
                 ✕ <span className="hidden sm:inline">&nbsp;ESC</span>
@@ -221,8 +210,19 @@ function FocusPanel() {
 /*  HUD chrome.                                                        */
 /* ------------------------------------------------------------------ */
 
+/** Live weather / time-of-day readout fed by the world simulation. */
+function WeatherLine() {
+  const { weather, phase } = useWorldMeta();
+  return (
+    <p>
+      WX: <span className="text-teal-200">{WX_LABELS[weather] ?? weather.toUpperCase()}</span> · {phase.toUpperCase()}
+    </p>
+  );
+}
+
 export default function HUD() {
   const { focused, focus, hint, booted, power } = useCommandCenter();
+  const landscapePhone = useViewport((s) => s.landscapePhone);
   const [clock, setClock] = useState('--:--:--');
 
   // hidden dev flags: /?fast=1 skips the boot sequence, &focus=<id> jumps to a monitor
@@ -248,7 +248,7 @@ export default function HUD() {
 
       {/* top bar */}
       <motion.header
-        className="pointer-events-none fixed inset-x-0 top-0 z-40 flex items-start justify-between p-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:p-5"
+        className="hud-top pointer-events-none fixed inset-x-0 top-0 z-40 flex items-start justify-between p-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))] md:p-5"
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: booted ? 1 : 0, y: booted ? 0 : -12 }}
         transition={{ delay: 0.6, duration: 0.8 }}
@@ -257,11 +257,13 @@ export default function HUD() {
           <p className="font-display text-xs font-bold tracking-[0.3em] text-slate-100 md:text-sm md:tracking-[0.35em]">
             ABDULLAH SHIBIB
           </p>
-          <p className="mt-1 font-mono text-[9px] tracking-[0.2em] text-teal-300/70 md:text-[10px] md:tracking-[0.25em]">
-            DATA ENGINEER · SOFTWARE ENGINEER · AI DEVELOPER
-          </p>
+          {!landscapePhone && (
+            <p className="mt-1 font-mono text-[9px] tracking-[0.2em] text-teal-300/70 md:text-[10px] md:tracking-[0.25em]">
+              DATA ENGINEER · SOFTWARE ENGINEER · AI DEVELOPER
+            </p>
+          )}
         </div>
-        <div className="hidden text-right font-mono text-[10px] leading-relaxed text-teal-300/60 md:block">
+        <div className={`text-right font-mono text-[10px] leading-relaxed text-teal-300/60 ${landscapePhone ? 'hidden' : 'hidden md:block'}`}>
           <p>
             SYS{' '}
             {power ? (
@@ -274,12 +276,13 @@ export default function HUD() {
           <p>
             SECTOR: <span className="text-teal-200">{focused ? monitorById(focused).label.toUpperCase() : 'OVERVIEW'}</span>
           </p>
+          <WeatherLine />
         </div>
       </motion.header>
 
       {/* bottom nav */}
       <motion.nav
-        className="fixed inset-x-0 bottom-0 z-40 flex flex-col items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:p-5"
+        className={`hud-nav fixed inset-x-0 bottom-0 z-40 flex flex-col items-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] ${landscapePhone ? 'gap-1 !p-1.5 !pb-[max(0.375rem,env(safe-area-inset-bottom))]' : 'gap-2 md:p-5'}`}
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: booted ? 1 : 0, y: booted ? 0 : 12 }}
         transition={{ delay: 0.9, duration: 0.8 }}
@@ -307,7 +310,7 @@ export default function HUD() {
           )}
         </AnimatePresence>
 
-        <div className="pointer-events-auto flex max-w-full gap-2 overflow-x-auto px-2 pb-1 [scrollbar-width:none] md:flex-wrap md:justify-center md:overflow-visible">
+        <div className={`pointer-events-auto flex max-w-full gap-2 overflow-x-auto px-2 pb-1 [scrollbar-width:none] ${landscapePhone ? '' : 'md:flex-wrap md:justify-center md:overflow-visible'}`}>
           {MONITORS.map((m) => (
             <button
               key={m.id}
