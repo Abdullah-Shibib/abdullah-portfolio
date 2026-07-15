@@ -1,12 +1,14 @@
 'use client';
 
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { create } from 'zustand';
 import { Color, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, Path, Shape, ShapeGeometry, Vector3 } from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
+import { playSwitchClick } from '@/lib/audio';
 import { MONITORS, MonitorDef, MonitorId, monitorById } from '@/lib/data';
 import { useCommandCenter } from '@/lib/store';
-import { WORLD } from '@/lib/world';
+import { useWorldMeta, WORLD } from '@/lib/world';
 import { SCREENS } from './screens';
 
 /** Pixels of DOM content per world unit — drei maps world = px * distanceFactor / 400. */
@@ -74,7 +76,11 @@ function resolveScreenMonitorAt(clientX: number, clientY: number, camera: any, c
   let best: MonitorId | null = null;
   let bestScore = Infinity;
 
+  const level = useCommandCenter.getState().location;
   for (const m of MONITORS) {
+    // monitors on the other level can't be seen — and their projected quads
+    // land in nonsense screen positions, so they must never claim a click
+    if ((m.level ?? 'surface') !== level) continue;
     const center = new Vector3(...m.position);
     const xAxis = new Vector3(Math.cos(m.yaw), 0, -Math.sin(m.yaw));
     const halfW = m.size[0] / 2 + BEZEL * 1.25;
@@ -123,6 +129,7 @@ function resolveScreenMonitorAt(clientX: number, clientY: number, camera: any, c
 
 function PoweredScreen({ children }: { children: ReactNode }) {
   const power = useCommandCenter((s) => s.power);
+  const glitching = useWorldMeta((s) => s.glitching);
   const [phase, setPhase] = useState<'on' | 'dying' | 'off' | 'booting'>(power ? 'on' : 'off');
   const prev = useRef(power);
 
@@ -152,7 +159,11 @@ function PoweredScreen({ children }: { children: ReactNode }) {
 
   return (
     <div className="relative h-full w-full bg-black" style={{ borderRadius: 10 }}>
-      <div className={`h-full w-full ${phase === 'dying' ? 'crt-off' : phase === 'booting' ? 'crt-on' : ''}`}>
+      <div
+        className={`h-full w-full ${phase === 'dying' ? 'crt-off' : phase === 'booting' ? 'crt-on' : ''} ${
+          glitching && phase === 'on' ? 'cosmic-glitch' : ''
+        }`}
+      >
         {children}
       </div>
     </div>
@@ -167,9 +178,17 @@ function LightBar({ w, h, initiallyOn = false }: { w: number; h: number; initial
   const [on, setOn] = useState(initiallyOn);
   const power = useCommandCenter((s) => s.power);
   const setHint = useCommandCenter((s) => s.setHint);
+  const lightBarsOn = useCommandCenter((s) => s.lightBarsOn);
+  const lightBarsN = useCommandCenter((s) => s.lightBarsN);
   const light = useRef<any>(null);
   const strip = useRef<any>(null);
   const lit = on && power;
+
+  // the desk master switch drives every bar; individual clicks still work after
+  useEffect(() => {
+    if (lightBarsN > 0) setOn(lightBarsOn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightBarsN]);
 
   useFrame((_, dt) => {
     const k = Math.min(1, dt * 5);
@@ -183,6 +202,7 @@ function LightBar({ w, h, initiallyOn = false }: { w: number; h: number; initial
       position={[0, y, 0.03]}
       onClick={(e) => {
         e.stopPropagation();
+        playSwitchClick(!on);
         setOn((o) => !o);
       }}
       onPointerOver={(e) => {
@@ -224,8 +244,25 @@ interface MonitorProps {
   hovered: boolean;
 }
 
+/** Which side of the ground plane the camera is on — DOM screens ignore
+ *  depth, so each screen only renders while the camera shares its level.
+ *  The swap happens mid-shaft, hidden by the concrete darkness. */
+const useCamSide = create<{ below: boolean }>(() => ({ below: false }));
+
+function CamSideTracker() {
+  useFrame(({ camera }) => {
+    const below = camera.position.y < -0.25;
+    if (useCamSide.getState().below !== below) useCamSide.setState({ below });
+  });
+  return null;
+}
+
 function Monitor({ def, hovered }: MonitorProps) {
   const { focused, power } = useCommandCenter();
+  const below = useCamSide((s) => s.below);
+  // DOM overlays ignore depth — they'd shine straight through six meters
+  // of dirt. A screen exists only while the camera is on its level.
+  const screenVisible = ((def.level ?? 'surface') === 'bunker') === below;
   const edgeRef = useRef<Mesh>(null);
   const ringMat = useRef<MeshBasicMaterial>(null);
   const backingRef = useRef<MeshStandardMaterial>(null);
@@ -264,9 +301,10 @@ function Monitor({ def, hovered }: MonitorProps) {
       const target = hovered && power && !isFocused ? 0.85 : 0;
       ringMat.current.opacity += (target - ringMat.current.opacity) * Math.min(1, dt * 12);
     }
-    // screen glow dies with the master power
+    // screen glow dies with the master power; the cosmic glitch makes it stutter
     if (backingRef.current) {
-      backingRef.current.emissiveIntensity += ((power ? 0.55 : 0.02) - backingRef.current.emissiveIntensity) * k;
+      const glitchFlicker = WORLD.glitch > 0.01 ? Math.sin(performance.now() * 0.05 + def.position[0] * 7) * 0.3 * WORLD.glitch : 0;
+      backingRef.current.emissiveIntensity += ((power ? 0.55 + glitchFlicker : 0.02) - backingRef.current.emissiveIntensity) * Math.min(1, k * (WORLD.glitch > 0.01 ? 4 : 1));
     }
     if (ledRef.current) ledRef.current.color.set(power ? '#b8c49a' : '#4a2620');
     // lean toward the visitor on hover
@@ -284,29 +322,6 @@ function Monitor({ def, hovered }: MonitorProps) {
 
   return (
     <group position={def.position} rotation={[0, def.yaw, 0]}>
-      {/* the AI core sits past the scaffold's end — it gets its own salvaged rig */}
-      {def.id === 'assistant' && (
-        <group position={[0, 0, -0.12]}>
-          <mesh position={[0, -def.position[1] / 2, 0]}>
-            <cylinderGeometry args={[0.05, 0.07, def.position[1], 8]} />
-            <meshStandardMaterial color="#4f4438" metalness={0.5} roughness={0.7} />
-          </mesh>
-          {/* diagonal brace back toward the scaffold */}
-          <mesh position={[0.5, -def.position[1] * 0.55, -0.3]} rotation={[0.3, 0, -0.7]}>
-            <cylinderGeometry args={[0.03, 0.03, 1.7, 6]} />
-            <meshStandardMaterial color="#443a30" metalness={0.5} roughness={0.7} />
-          </mesh>
-          {/* ivy claiming the pole + a sandbag counterweight at the base */}
-          <mesh position={[0.02, -def.position[1] * 0.72, 0.03]}>
-            <cylinderGeometry args={[0.075, 0.09, 1.1, 6]} />
-            <meshStandardMaterial color="#44522f" roughness={1} />
-          </mesh>
-          <mesh position={[-0.15, -def.position[1] + 0.12, 0.15]} rotation={[Math.PI / 2, 0, 0.4]}>
-            <capsuleGeometry args={[0.11, 0.24, 4, 8]} />
-            <meshStandardMaterial color="#7d6e52" roughness={1} />
-          </mesh>
-        </group>
-      )}
       <group ref={tiltRef}>
         {/* wall mount */}
         <mesh position={[0, 0, -0.09]}>
@@ -358,6 +373,8 @@ function Monitor({ def, hovered }: MonitorProps) {
             style={{
               width: Math.round(w * PX_PER_UNIT),
               height: Math.round(h * PX_PER_UNIT),
+              opacity: screenVisible ? 1 : 0,
+              transition: 'opacity 0.45s ease',
             }}
           >
             <PoweredScreen>
@@ -493,6 +510,7 @@ export default function MonitorWall() {
 
   return (
     <group>
+      <CamSideTracker />
       {MONITORS.map((m) => (
         <Monitor key={m.id} def={m} hovered={hoveredId === m.id} />
       ))}

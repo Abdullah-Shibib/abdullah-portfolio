@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { localAssistantReply, SUGGESTED_PROMPTS } from '@/lib/assistant';
 import { MonitorId } from '@/lib/data';
 import { useCommandCenter } from '@/lib/store';
+import { useWorldMeta } from '@/lib/world';
 
 /* ------------------------------------------------------------------ */
 /*  AXIS INTELLIGENCE — the command center's surviving AI.             */
@@ -152,6 +153,42 @@ async function sendMessage(raw: string) {
   } catch {
     runLocal();
   }
+}
+
+/* ---------------------- cosmic glitch reaction --------------------- */
+
+/* When the world glitches, AXIS stalls for a beat and logs the anomaly.
+   Module-level so it fires even while the panel is closed — the lines
+   land in history and surface on the in-world screen. */
+const GLITCH_LINES = [
+  'Signal interference detected…',
+  'Unknown transmission received…',
+  'Synchronizing backup systems…',
+  'Restoring stable connection. Link stable — where were we?',
+];
+
+let glitchArmed = true;
+if (typeof window !== 'undefined') {
+  useWorldMeta.subscribe((s) => {
+    if (!s.glitching) {
+      glitchArmed = true;
+      return;
+    }
+    if (!glitchArmed) return;
+    glitchArmed = false;
+
+    const st = useAssistant.getState();
+    if (!st.booted || st.busy) return; // never interrupt an in-flight reply
+    st.setBusy(true); // the AI pauses — input locks for the duration
+    st.push({ role: 'assistant', content: '' });
+    GLITCH_LINES.forEach((line, i) => {
+      setTimeout(() => {
+        const cur = useAssistant.getState();
+        cur.setLast(GLITCH_LINES.slice(0, i + 1).join('\n'));
+        if (i === GLITCH_LINES.length - 1) cur.setBusy(false);
+      }, 350 + i * 1250);
+    });
+  });
 }
 
 /* --------------------------- boot lines ---------------------------- */

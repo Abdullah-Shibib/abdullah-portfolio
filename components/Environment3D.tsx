@@ -40,9 +40,12 @@ function StarField() {
     const pts = ref.current;
     if (!pts) return;
     const m = pts.material as any;
-    // subtle global twinkle ride on top of the night fade
-    m.opacity = WORLD.starOpacity * (0.75 + Math.sin(clock.elapsedTime * 0.8) * 0.08);
-    pts.visible = WORLD.starOpacity > 0.02;
+    // subtle global twinkle ride on top of the night fade; during a cosmic
+    // glitch the stars strobe faintly even against a bright sky
+    m.opacity =
+      WORLD.starOpacity * (0.75 + Math.sin(clock.elapsedTime * 0.8) * 0.08) +
+      WORLD.glitch * Math.max(0, Math.sin(clock.elapsedTime * 29)) * 0.35;
+    pts.visible = m.opacity > 0.02;
   });
 
   return (
@@ -133,13 +136,20 @@ export default function Environment3D() {
   useFrame(({ clock }, dt) => {
     advanceWorld(dt, clock.elapsedTime);
 
-    // sky shader tracks the sun + weather haze
+    // sky shader tracks the sun + weather haze; the cosmic glitch bends it
     const sky = skyRef.current;
     if (sky?.material?.uniforms) {
       const u = sky.material.uniforms;
+      const g = WORLD.glitch;
+      const t = clock.elapsedTime;
       u.sunPosition.value.copy(WORLD.sunPos);
-      u.turbidity.value = WORLD.turbidity;
-      u.rayleigh.value = 0.25 + WORLD.dayness * 3.5 + WORLD.golden * 0.6;
+      if (g > 0.01) {
+        // the sun's apparent position shudders — the whole sky warps subtly
+        u.sunPosition.value.x += Math.sin(t * 31.7) * 3.5 * g;
+        u.sunPosition.value.y += Math.sin(t * 24.3) * 2.0 * g;
+      }
+      u.turbidity.value = WORLD.turbidity + g * Math.sin(t * 41) * 5;
+      u.rayleigh.value = 0.25 + WORLD.dayness * 3.5 + WORLD.golden * 0.6 + g * Math.sin(t * 17) * 0.7;
       u.mieCoefficient.value = 0.005 + WORLD.golden * 0.006 + WORLD.cloud * 0.008;
       u.mieDirectionalG.value = 0.85;
     }
@@ -151,7 +161,8 @@ export default function Environment3D() {
       fog.near = WORLD.fogNear;
       fog.far = WORLD.fogFar;
     }
-    gl.toneMappingExposure = WORLD.exposure + WORLD.lightning * 0.05;
+    gl.toneMappingExposure =
+      WORLD.exposure + WORLD.lightning * 0.05 + WORLD.glitch * Math.sin(clock.elapsedTime * 47) * 0.045;
   }, -2);
 
   return (

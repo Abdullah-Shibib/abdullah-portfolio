@@ -15,12 +15,9 @@ import { create } from 'zustand';
 
 export type WeatherKind = 'clear' | 'partly' | 'overcast' | 'mist' | 'fogbank' | 'storm';
 
-/** One full day in seconds — long enough to feel ambient, short enough
- *  that a visitor exploring for a few minutes sees dusk fall. */
-const CYCLE = 420;
-
-/** Where the day starts for a fresh visitor: dramatic golden hour,
- *  matching the portfolio's signature look. */
+/** The day/night cycle is disabled — the world holds its signature
+ *  golden-hour daytime permanently. Weather, wind, and the glitch event
+ *  still evolve; `?tod=` can still pin any other time for testing. */
 const START_T = 0.71;
 
 interface WeatherParams {
@@ -71,6 +68,8 @@ export interface World {
   lightning: number;
   /** world x the current strike came from — lights lean that way */
   lightningX: number;
+  /** 0..1 envelope of the rare cosmic glitch event */
+  glitch: number;
 
   sunPos: Vector3;
   moonPos: Vector3;
@@ -102,6 +101,7 @@ export const WORLD: World = {
   gust: 0,
   lightning: 0,
   lightningX: -30,
+  glitch: 0,
   sunPos: new Vector3(16, 6, -34),
   moonPos: new Vector3(-16, 20, -34),
   sunColor: new Color('#ffd9a0'),
@@ -119,9 +119,10 @@ export const WORLD: World = {
 /* React-facing snapshot — updated only when the label actually changes,
    so the HUD can show "WX: STORM FRONT · DUSK" without frame churn. */
 export type DayPhase = 'dawn' | 'day' | 'golden hour' | 'dusk' | 'night';
-export const useWorldMeta = create<{ weather: WeatherKind; phase: DayPhase }>(() => ({
+export const useWorldMeta = create<{ weather: WeatherKind; phase: DayPhase; glitching: boolean }>(() => ({
   weather: 'clear',
   phase: 'golden hour',
+  glitching: false,
 }));
 
 /* ---------------------------- helpers ----------------------------- */
@@ -152,6 +153,11 @@ let strikeIn = 6 + Math.random() * 10;
 let gustTarget = 0;
 let gustLeft = 0;
 let started = false;
+
+/* Cosmic glitch: very rare — a visitor might see one, might not. */
+let glitchIn = 200 + Math.random() * 400;
+let glitchLeft = 0;
+const GLITCH_DURATION = 5.5;
 
 function pickWeather(prev: WeatherKind, t: number): WeatherKind {
   // dawn strongly favors mist; otherwise a natural, mostly-pleasant mix
@@ -188,9 +194,15 @@ function applyDevOverrides() {
     WORLD.weather = wx;
     pinnedWeather = true;
   }
+  // /?glitch=1 — trigger the cosmic glitch soon & often, for testing
+  if (p.has('glitch')) {
+    glitchIn = 4;
+    frequentGlitch = true;
+  }
 }
 let pinnedTime = false;
 let pinnedWeather = false;
+let frequentGlitch = false;
 
 /* ---------------------------- advance ------------------------------ */
 
@@ -203,8 +215,7 @@ export function advanceWorld(dt: number, elapsed: number) {
   const w = WORLD;
   const step = Math.min(dt, 0.1); // rotation hiccups shouldn't jump the clock
 
-  /* -- time of day -- */
-  if (!pinnedTime) w.t = (w.t + step / CYCLE) % 1;
+  /* -- time of day: fixed (cycle removed) unless ?tod= pinned a value -- */
   const elev = Math.sin((w.t - 0.25) * Math.PI * 2); // -1..1, 0 at 6am/6pm
   w.elev = elev;
   w.dayness = smooth(-0.06, 0.22, elev);
@@ -261,6 +272,25 @@ export function advanceWorld(dt: number, elapsed: number) {
   w.lightning *= Math.exp(-step * 7); // sharp attack, fast decay
   if (w.lightning < 0.001) w.lightning = 0;
 
+  /* -- cosmic glitch: rare, cinematic, self-healing -- */
+  if (glitchLeft > 0) {
+    glitchLeft -= step;
+    const p = 1 - glitchLeft / GLITCH_DURATION; // 0 → 1 through the event
+    // ease in over 0.8s, hold with instability, ease out over the last 1.5s
+    const envelope =
+      Math.min(1, p * GLITCH_DURATION / 0.8) *
+      Math.min(1, Math.max(0, glitchLeft / 1.5));
+    // the instability itself: rapid but band-limited wobble
+    w.glitch = envelope * (0.55 + Math.sin(elapsed * 23.7) * 0.25 + Math.sin(elapsed * 7.3) * 0.2);
+    if (glitchLeft <= 0) {
+      w.glitch = 0;
+      glitchIn = frequentGlitch ? 12 + Math.random() * 10 : 240 + Math.random() * 480;
+    }
+  } else {
+    glitchIn -= step;
+    if (glitchIn <= 0) glitchLeft = GLITCH_DURATION;
+  }
+
   /* -- lighting rig values -- */
   const clearSky = 1 - w.cloud * 0.85;
   w.sunIntensity = (0.05 + w.dayness * 1.35) * w.sunMul * (1 + w.golden * 0.25);
@@ -286,8 +316,9 @@ export function advanceWorld(dt: number, elapsed: number) {
     : w.dayness > 0.75 ? (w.golden > 0.3 ? 'golden hour' : 'day')
     : w.golden > 0.25 ? 'golden hour'
     : w.t < 0.5 ? 'dawn' : 'dusk';
+  const glitching = glitchLeft > 0;
   const meta = useWorldMeta.getState();
-  if (meta.weather !== w.weather || meta.phase !== phase) {
-    useWorldMeta.setState({ weather: w.weather, phase });
+  if (meta.weather !== w.weather || meta.phase !== phase || meta.glitching !== glitching) {
+    useWorldMeta.setState({ weather: w.weather, phase, glitching });
   }
 }

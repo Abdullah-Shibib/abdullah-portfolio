@@ -1322,7 +1322,9 @@ function Clouds() {
     drift.current += Math.min(dt, 0.1) * (0.4 + WORLD.wind * 2.2);
     const cover = WORLD.cloud;
     const shade = 1 - cover * 0.5 + WORLD.lightning * 0.9; // storms darken, strikes light them up
-    const brightness = Math.max(0.2, shade) * (0.35 + WORLD.dayness * 0.65);
+    // during a cosmic glitch the distant deck shimmers with unnatural light
+    const shimmer = WORLD.glitch * Math.max(0, Math.sin(performance.now() * 0.02)) * 0.5;
+    const brightness = Math.max(0.2, shade + shimmer) * (0.35 + WORLD.dayness * 0.65);
     defs.forEach((d, i) => {
       const g = refs.current[i];
       if (!g) return;
@@ -1661,7 +1663,8 @@ function HoloGlobe() {
   });
 
   return (
-    <group position={[-1.55, 0, -0.75]}>
+    // right flank of the desk — keeps it clear of the AXIS monitor sightline
+    <group position={[1.55, 0, -0.75]}>
       <group ref={ref} position={[0, 1.35, 0]}>
         <points>
           <bufferGeometry>
@@ -1782,7 +1785,15 @@ function DynamicLights() {
       hemi.current.color.copy(HEMI_SKY_DAY).lerp(HEMI_SKY_NIGHT, w.night);
       hemi.current.groundColor.copy(HEMI_GND_DAY).lerp(HEMI_GND_NIGHT, w.night);
     }
-    if (amb.current) amb.current.intensity = w.ambientIntensity;
+    if (amb.current) {
+      amb.current.intensity = w.ambientIntensity * (1 + w.glitch * 0.4);
+      // a faint spectral cast while the glitch runs, healing back to warm
+      amb.current.color.setRGB(
+        0.79 - w.glitch * 0.15,
+        0.72 - w.glitch * 0.05,
+        0.56 + w.glitch * 0.35,
+      );
+    }
     // the camp glow reads stronger once darkness falls — monitors become beacons
     if (desk.current) desk.current.intensity = 1.4 + w.night * 0.6;
   });

@@ -5,6 +5,7 @@ import {
   CatmullRomCurve3, Color, Group, InstancedMesh, MathUtils, Object3D, SpotLight, Vector3,
 } from 'three';
 import { ThreeEvent, useFrame } from '@react-three/fiber';
+import { playSwitchClick } from '@/lib/audio';
 import { useCommandCenter } from '@/lib/store';
 
 const dummy = new Object3D();
@@ -813,6 +814,86 @@ function EmergencySwitch() {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Light-bar master switch — one industrial toggle for every bar.     */
+/* ------------------------------------------------------------------ */
+
+function LightBarSwitch() {
+  const lightBarsOn = useCommandCenter((s) => s.lightBarsOn);
+  const { toggleLightBars, setHint } = useCommandCenter.getState();
+  const power = useCommandCenter((s) => s.power);
+  const lever = useRef<Group>(null);
+
+  useFrame((_, dt) => {
+    if (lever.current) {
+      const target = lightBarsOn ? -0.55 : 0.55;
+      lever.current.rotation.x += (target - lever.current.rotation.x) * Math.min(1, dt * 14);
+    }
+  });
+
+  return (
+    <group
+      position={[-1.12, TOP, -0.48]}
+      rotation={[0, 0.42, 0]}
+      scale={1.7}
+      onClick={(e) => {
+        e.stopPropagation();
+        playSwitchClick(!lightBarsOn);
+        toggleLightBars();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        document.body.style.cursor = 'pointer';
+        setHint(lightBarsOn ? 'LIGHT BARS — master switch · all off' : 'LIGHT BARS — master switch · all on');
+      }}
+      onPointerOut={() => {
+        document.body.style.cursor = 'auto';
+        setHint(null);
+      }}
+    >
+      {/* generous hitbox */}
+      <mesh visible={false} position={[0, 0.05, 0]}>
+        <boxGeometry args={[0.24, 0.14, 0.24]} />
+      </mesh>
+      {/* wall-box style housing screwed to the desk */}
+      <mesh position={[0, 0.03, 0]}>
+        <boxGeometry args={[0.1, 0.06, 0.14]} />
+        <meshStandardMaterial color="#2e3230" metalness={0.6} roughness={0.5} />
+      </mesh>
+      {/* rounded switch collar */}
+      <mesh position={[0, 0.062, 0]}>
+        <cylinderGeometry args={[0.028, 0.034, 0.012, 10]} />
+        <meshStandardMaterial color="#1c1e1c" metalness={0.7} roughness={0.4} />
+      </mesh>
+      {/* the toggle lever */}
+      <group ref={lever} position={[0, 0.065, 0]}>
+        <mesh position={[0, 0.024, 0]} rotation={[0, 0, 0]}>
+          <cylinderGeometry args={[0.007, 0.01, 0.05, 8]} />
+          <meshStandardMaterial color="#8a8578" metalness={0.8} roughness={0.3} />
+        </mesh>
+        <mesh position={[0, 0.052, 0]}>
+          <sphereGeometry args={[0.011, 8, 8]} />
+          <meshStandardMaterial color="#7a2018" roughness={0.5} />
+        </mesh>
+      </group>
+      {/* status LED + stencil plate */}
+      <mesh position={[0.032, 0.062, 0.05]}>
+        <sphereGeometry args={[0.006, 8, 8]} />
+        <meshBasicMaterial color={lightBarsOn && power ? '#eef2dc' : '#3a3428'} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0.035, 0.072]} rotation={[-0.2, 0, 0]}>
+        <planeGeometry args={[0.08, 0.02]} />
+        <meshStandardMaterial color="#c9c4ae" roughness={0.95} />
+      </mesh>
+      {/* thin flex conduit sneaking off the desk toward the wall trunk */}
+      <mesh position={[-0.02, 0.012, -0.16]} rotation={[Math.PI / 2, 0, 0.15]}>
+        <cylinderGeometry args={[0.006, 0.006, 0.22, 6]} />
+        <meshStandardMaterial color="#141512" roughness={0.8} />
+      </mesh>
+    </group>
+  );
+}
+
 /** Stamps the press time with the scene clock (same trick as the keyboard). */
 function SwitchClock({ pressT }: { pressT: React.MutableRefObject<number> }) {
   useFrame(({ clock }) => {
@@ -1000,6 +1081,7 @@ export default function DeskArea() {
       <IdBadge />
 
       <EmergencySwitch />
+      <LightBarSwitch />
       <SwitchWiring />
       <PcTower />
       <GamingChair />

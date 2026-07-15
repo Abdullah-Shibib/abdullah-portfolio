@@ -228,6 +228,21 @@ body {
   transform-origin: center;
 }
 
+/* ---------- Cosmic glitch — brief signal interference on the screens ---------- */
+@keyframes cosmic-glitch {
+  0%, 100% { transform: translate(0, 0) skewX(0deg); opacity: 1; filter: none; }
+  8% { transform: translate(-1.5px, 0.5px) skewX(0.6deg); opacity: 0.92; filter: hue-rotate(18deg); }
+  12% { transform: translate(1px, -0.5px) skewX(-0.4deg); opacity: 1; }
+  34% { transform: translate(0, 0); opacity: 0.85; filter: saturate(1.6); }
+  37% { transform: translate(2px, 0) skewX(-0.8deg); opacity: 1; filter: none; }
+  60% { transform: translate(-0.5px, 1px); opacity: 0.9; filter: hue-rotate(-24deg); }
+  64% { transform: translate(0, 0); opacity: 1; filter: none; }
+  86% { transform: translate(1px, 0) skewX(0.5deg); opacity: 0.88; }
+}
+.cosmic-glitch {
+  animation: cosmic-glitch 0.9s steps(12) infinite;
+}
+
 @keyframes nosignal-drift {
   0%, 100% { transform: translate(0, 0); }
   25% { transform: translate(6px, -4px); }

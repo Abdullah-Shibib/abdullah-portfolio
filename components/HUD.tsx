@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { playLadderSteps } from '@/lib/audio';
 import { MONITORS, monitorById } from '@/lib/data';
 import { useCommandCenter } from '@/lib/store';
 import { useViewport } from '@/lib/viewport';
@@ -212,7 +213,20 @@ function FocusPanel() {
 
 /** Live weather / time-of-day readout fed by the world simulation. */
 function WeatherLine() {
-  const { weather, phase } = useWorldMeta();
+  const { weather, phase, glitching } = useWorldMeta();
+  const location = useCommandCenter((s) => s.location);
+  if (location === 'bunker') {
+    return (
+      <p>
+        ENV: <span className="text-teal-200">SHELTERED</span> · AIR NOMINAL
+      </p>
+    );
+  }
+  if (glitching) {
+    return (
+      <p className="animate-pulse text-ember">WX: ▒▒ SIGNAL ANOMALY ▒▒</p>
+    );
+  }
   return (
     <p>
       WX: <span className="text-teal-200">{WX_LABELS[weather] ?? weather.toUpperCase()}</span> · {phase.toUpperCase()}
@@ -221,7 +235,7 @@ function WeatherLine() {
 }
 
 export default function HUD() {
-  const { focused, focus, hint, booted, power } = useCommandCenter();
+  const { focused, focus, hint, booted, power, location, traveling, travel } = useCommandCenter();
   const landscapePhone = useViewport((s) => s.landscapePhone);
   const [clock, setClock] = useState('--:--:--');
 
@@ -233,6 +247,8 @@ export default function HUD() {
     if (target && MONITORS.some((m) => m.id === target)) {
       useCommandCenter.getState().focus(target as (typeof MONITORS)[number]['id']);
     }
+    // &loc=bunker drops straight into the shelter
+    if (params.get('loc') === 'bunker') useCommandCenter.getState().travel('bunker');
   }, []);
 
   useEffect(() => {
@@ -274,7 +290,16 @@ export default function HUD() {
             · {clock}
           </p>
           <p>
-            SECTOR: <span className="text-teal-200">{focused ? monitorById(focused).label.toUpperCase() : 'OVERVIEW'}</span>
+            SECTOR:{' '}
+            <span className="text-teal-200">
+              {focused
+                ? monitorById(focused).label.toUpperCase()
+                : traveling
+                  ? 'ACCESS SHAFT'
+                  : location === 'bunker'
+                    ? 'SHELTER SUB-LEVEL'
+                    : 'OVERVIEW'}
+            </span>
           </p>
           <WeatherLine />
         </div>
@@ -282,7 +307,7 @@ export default function HUD() {
 
       {/* bottom nav */}
       <motion.nav
-        className={`hud-nav fixed inset-x-0 bottom-0 z-40 flex flex-col items-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] ${landscapePhone ? 'gap-1 !p-1.5 !pb-[max(0.375rem,env(safe-area-inset-bottom))]' : 'gap-2 md:p-5'}`}
+        className={`hud-nav pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col items-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] ${landscapePhone ? 'gap-1 !p-1.5 !pb-[max(0.375rem,env(safe-area-inset-bottom))]' : 'gap-2 md:p-5'}`}
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: booted ? 1 : 0, y: booted ? 0 : 12 }}
         transition={{ delay: 0.9, duration: 0.8 }}
@@ -305,23 +330,43 @@ export default function HUD() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              {power ? 'Tap a monitor to jack in' : 'Power is out — hit the red switch on the desk'}
+              {traveling
+                ? location === 'bunker'
+                  ? 'Descending…'
+                  : 'Climbing…'
+                : location === 'bunker'
+                  ? 'Safe below — AXIS is on the wall · the ladder leads back up'
+                  : power
+                    ? 'Tap a monitor to jack in'
+                    : 'Power is out — hit the red switch on the desk'}
             </motion.p>
           )}
         </AnimatePresence>
 
         <div className={`pointer-events-auto flex max-w-full gap-2 overflow-x-auto px-2 pb-1 [scrollbar-width:none] ${landscapePhone ? '' : 'md:flex-wrap md:justify-center md:overflow-visible'}`}>
-          {MONITORS.map((m) => (
+          {MONITORS.filter((m) => (m.level ?? 'surface') === location).map((m) => (
             <button
               key={m.id}
               className="hud-chip shrink-0"
               data-active={focused === m.id}
-              disabled={!power}
+              disabled={!power || traveling}
               onClick={() => focus(focused === m.id ? null : m.id)}
             >
               {m.label}
             </button>
           ))}
+          {location === 'bunker' && (
+            <button
+              className="hud-chip shrink-0"
+              disabled={traveling}
+              onClick={() => {
+                playLadderSteps(4, true);
+                travel('surface');
+              }}
+            >
+              ▲ Return to surface
+            </button>
+          )}
         </div>
       </motion.nav>
 

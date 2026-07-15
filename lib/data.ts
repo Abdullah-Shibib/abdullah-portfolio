@@ -27,6 +27,8 @@ export interface MonitorDef {
   size: [number, number];
   /** Camera distance from the screen when focused */
   viewDistance: number;
+  /** which level the monitor physically lives on (default: surface) */
+  level?: 'surface' | 'bunker';
 }
 
 export const MONITORS: MonitorDef[] = [
@@ -104,11 +106,14 @@ export const MONITORS: MonitorDef[] = [
     id: 'assistant',
     label: 'AI Assistant',
     title: 'AXIS INTELLIGENCE',
-    subtitle: "The command center's surviving AI — ask it anything",
-    position: [-6.42, 2.42, -3.26],
-    yaw: 0.72,
-    size: [1.6, 1.05],
-    viewDistance: 2.15,
+    subtitle: "The shelter's surviving AI — ask it anything",
+    // mounted over the bunker workbench — the AI retreated below with
+    // everything else worth keeping alive
+    position: [-3.5, -3.32, -3.84],
+    yaw: 0,
+    size: [1.35, 0.78],
+    viewDistance: 1.7,
+    level: 'bunker',
   },
 ];
 

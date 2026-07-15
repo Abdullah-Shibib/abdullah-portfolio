@@ -10,12 +10,12 @@ import Environment3D from './Environment3D';
 import Room from './Room';
 import Wildlife from './Wildlife';
 import MonitorWall from './MonitorWall';
+import Bunker from './Bunker';
 import { useCommandCenter } from '@/lib/store';
 
-/** Coarse-pointer (phone/tablet) detection — client-only bundle, safe to read. */
-export const IS_TOUCH =
-  typeof window !== 'undefined' &&
-  (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 1 || window.innerWidth < 700);
+// re-exported for existing importers; lives in lib/touch to avoid import cycles
+import { IS_TOUCH } from '@/lib/touch';
+export { IS_TOUCH };
 
 /** DOF that eases deeper while a monitor is focused, softening the room. */
 function FocusDOF() {
@@ -63,6 +63,7 @@ export default function Experience() {
         <Room />
         <Wildlife />
         <MonitorWall />
+        <Bunker />
         <Preload all />
       </Suspense>
 
